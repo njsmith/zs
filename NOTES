@@ -1,0 +1,11 @@
+* CRC32-c
+
+Using pycrc 0.8.1:
+  python pycrc.py --model crc-32c --algorithm table-driven --symbol-prefix pycrc_crc32c_ --generate h -o pycrc-crc32c.h
+
+  python pycrc.py --model crc-32c --algorithm table-driven --symbol-prefix pycrc_crc32c_ --generate c -o pycrc-crc32c.c
+
+There are definitely faster implementations around, e.g.
+  https://code.google.com/p/crcutil/
+  http://www.evanjones.ca/crc32c.html
+but these seem more complicated to integrate (they need to detect CPU details, etc.) and as of 2013-07 no-one seems to be shipping a library that I can just use.
