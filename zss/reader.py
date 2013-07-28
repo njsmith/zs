@@ -58,6 +58,8 @@ class ZSS(object):
         self.compression = compression
         self.uuid = header["uuid"]
         self.metadata = header["metadata"]
+        if not isinstance(self.metadata, dict):
+            raise ZSSCorrupt("bad metadata")
 
     def _get_block_at(self, voffset):
         # XX in a parallelized reader, this should issue some prefetch

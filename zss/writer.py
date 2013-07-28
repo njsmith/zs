@@ -5,6 +5,9 @@ import os.path
 import multiprocessing
 import struct
 import sys
+import getpass
+import socket
+from datetime import datetime
 
 from zss.common import (ZSSError,
                         MAGIC,
@@ -49,7 +52,11 @@ class ZSSWriter(object):
         if os.path.exists(path):
             raise ZSSError("%s: file already exists" % (path,))
         self._file = open(path, "w+b")
-        self.metadata = metadata
+        self.metadata = dict(metadata)
+        self.metadata.setdefault("build-user", getpass.getuser())
+        self.metadata.setdefault("build-host", socket.getfqdn())
+        self.metadata.setdefault("build-time",
+                                 datetime.utcnow().isoformat() + "Z")
         self.branching_factor = branching_factor
         self.approx_block_size = approx_block_size
         self._parallelism = parallelism
