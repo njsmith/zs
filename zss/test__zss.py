@@ -21,7 +21,7 @@ def test_crc32c():
 
 def test_to_uleb128():
     assert to_uleb128(0) == b"\x00"
-    assert to_uleb128(0x10), b"\x10\x10"
+    assert to_uleb128(0x10) == b"\x10"
     assert to_uleb128(0x81) == b"\x81\x01"
     assert to_uleb128(0x7f) == b"\x7f"
     assert to_uleb128(0x107f) == b"\xff\x20"
