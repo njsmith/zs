@@ -1,6 +1,22 @@
 # Compressed Sorted Sets
 # A static database for range queries on compressible data.
 
+# TODO:
+# - use relative offsets to allow for cheap subsetting
+# - maybe add a new block type (new rule: blocks with high bit set, >= 128,
+#   are special) to indicate a span that is missing?
+# - replace each voffset with a block reference that has both relative offset
+#   *and* length of the block that is referred to, to halve round-trips when
+#   accessing a zss file over a dumb transport like HTTP or NFS
+# - then write a tool that given a URL fetches a subset
+#
+# ...But does anyone actually care about getting all and only the "a" ngrams?
+# In actual use, being able to fetch a span over a dumb transport is very
+# useful, but then what?  I guess the use is that if we can easily represent
+# the result of such a query as a ZSS file then it saves some hassle -- e.g.,
+# it means you aren't forced to immediately decompress what you fetch? ...but
+# again, who cares?
+
 # Data model: we have a set of variable-length opaque bitstrings. We want to
 # store them compressed, but be able to efficiently perform range queries,
 # i.e., read out all bitstrings which are in the range [low, high).
