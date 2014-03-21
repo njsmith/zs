@@ -108,6 +108,16 @@ class ZSS(object):
                     voffset = voffsets[first_ge_entry - 1]
                     # Continue looping
 
+    def dump(self, out_file, sep="\n"):
+        voffset = 0
+        while True:
+            block_level, contents, voffset = self._get_block_at(voffset)
+            if block_level is None:
+                break
+            elif block_level == 0:
+                out_file.write(sep.join(contents))
+                out_file.write(sep)
+
     def fsck(self):
         # Read through to find locations of all blocks
         # make sure they're sorted overall

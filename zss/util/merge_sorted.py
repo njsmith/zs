@@ -22,6 +22,8 @@ def clear_cloexec(fd):
     fcntl.fcntl(fd, fcntl.F_SETFD, flags & ~fcntl.FD_CLOEXEC)
 
 def main(progname, args):
+    paths = args
+
     # Raise our soft limit on the number of available fds to match our hard
     # limit.
     (_, hard_fd_limit) = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -48,16 +50,16 @@ def main(progname, args):
         for suffix, _ in codecs:
             if path.endswith(suffix):
                 fd_count += 2
-            else:
-                fd_count += 1
+                break
+        else:
+            fd_count += 1
     if fd_count >= hard_fd_limit:
         sys.stderr.write("Error: need %s fds, but hard limit is set to %s.\n")
         sys.stderr.write("Raise the maximum number of open files limit and "
                          "try again.\n")
         sys.exit(1)
 
-    paths = args
-    decompressors = {}
+    decompressors = []
     sort_paths = []
     for path in paths:
         for suffix, cmd in codecs:
@@ -68,7 +70,7 @@ def main(progname, args):
                 fd = decompressor.stdout.fileno()
                 clear_cloexec(fd)
                 sort_paths.append("/dev/fd/%s" % (fd,))
-                decompressors[path] = decompressor
+                decompressors.append((path, decompressor))
                 break
         else:
             sys.stderr.write("%s: not decompressing\n" % (path,))
@@ -81,7 +83,7 @@ def main(progname, args):
     sort.wait()
     sys.stderr.write("sort: exited\n")
     last_error = 0
-    for path, decompressor in decompressors.iteritems():
+    for path, decompressor in decompressors:
         decompressor.poll()
         if decompressor.returncode is None:
             decompressor.terminate()

@@ -20,7 +20,6 @@ setup(
     author_email="njs@pobox.com",
     packages=["zss"],
     url="https://github.com/njsmith/zss",
-    install_requires=[],
     classifiers =
       [ "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

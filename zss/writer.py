@@ -44,7 +44,7 @@ class _QUIT(object):
 class ZSSWriter(object):
     def __init__(self, path, metadata, branching_factor, approx_block_size,
                  parallelism, compression="bz2", compress_kwargs={},
-                 uuid=None):
+                 uuid=None, show_spinner=True):
         self._path = path
         # Technically there is a race condition here, but oh well. This is
         # just a safety/sanity check; it's not worth going through the
@@ -59,6 +59,7 @@ class ZSSWriter(object):
                                  datetime.utcnow().isoformat() + "Z")
         self.branching_factor = branching_factor
         self.approx_block_size = approx_block_size
+        self._show_spinner = show_spinner
         self._parallelism = parallelism
         self.compression = compression
         if self.compression not in codecs:
@@ -73,7 +74,7 @@ class ZSSWriter(object):
             "root_index_voffset": 2 ** 63 - 1,
             "uuid": uuid,
             "compression": self.compression,
-            "metadata": metadata,
+            "metadata": self.metadata,
             }
 
         self._file.write(INCOMPLETE_MAGIC)
@@ -102,7 +103,8 @@ class ZSSWriter(object):
         writer_args = (self._path,
                        data_offset, self.branching_factor,
                        self._compress_fn, self._compress_kwargs,
-                       self._write_queue, self._finish_queue)
+                       self._write_queue, self._finish_queue,
+                       self._show_spinner)
         self._writer = multiprocessing.Process(target=_write_worker,
                                                args=writer_args)
         self._writer.start()
@@ -173,9 +175,9 @@ def _compress_worker(approx_block_size, compress_fn, compress_kwargs,
     put = write_queue.put
     while True:
         job = get()
-        sys.stderr.write("compress_worker: got\n")
+        #sys.stderr.write("compress_worker: got\n")
         if job is _QUIT:
-            sys.stderr.write("compress_worker: QUIT\n")
+            #sys.stderr.write("compress_worker: QUIT\n")
             return
         # XX FIXME should really have a second (slower) API where the records
         # are encoded in some way that allows for arbitrary contents... but
@@ -185,12 +187,13 @@ def _compress_worker(approx_block_size, compress_fn, compress_kwargs,
         records = buf.split(sep)
         data = pdr(records, 2 * approx_block_size)
         zdata = compress_fn(data, **compress_kwargs)
-        sys.stderr.write("compress_worker: putting\n")
+        #sys.stderr.write("compress_worker: putting\n")
         put((idx, records[0], records[-1], zdata))
 
 def _write_worker(path, data_offset, branching_factor,
                   compress_fn, compress_kwargs,
-                  write_queue, finish_queue):
+                  write_queue, finish_queue,
+                  show_spinner):
     data_appender = _ZSSDataAppender(path, data_offset, branching_factor,
                                      compress_fn, compress_kwargs)
     pending_jobs = {}
@@ -199,7 +202,7 @@ def _write_worker(path, data_offset, branching_factor,
     write_block = data_appender.write_block
     while True:
         job = get()
-        sys.stderr.write("write_worker: got\n")
+        #sys.stderr.write("write_worker: got\n")
         if job is _QUIT:
             assert not pending_jobs
             root = data_appender.close_and_get_root_voffset()
@@ -207,8 +210,10 @@ def _write_worker(path, data_offset, branching_factor,
             return
         pending_jobs[job[0]] = job[1:]
         while wanted_job in pending_jobs:
-            sys.stderr.write("write_worker: writing %s\n" % (wanted_job,))
+            #sys.stderr.write("write_worker: writing %s\n" % (wanted_job,))
             write_block(0, *pending_jobs[wanted_job])
+            if show_spinner and wanted_job % 100 == 0:
+                sys.stderr.write(".")
             del pending_jobs[wanted_job]
             wanted_job += 1
 
