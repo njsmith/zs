@@ -27,6 +27,7 @@
 #     stream to that
 
 import sys
+import os
 import struct
 import json
 from six import BytesIO
@@ -165,16 +166,16 @@ def _map_helper(block_level, zdata, stop, decompress_fn,
                 user_fn, user_args, user_kwargs):
     data = decompress_fn(zdata)
     records = unpack_data_records(data)
-    if records[0] >= stop:
+    if stop is not None and records[0] >= stop:
         raise _ZSSMapStop()
     return user_fn(records, *user_args, **user_kwargs)
 
 def _dump_helper(records, start, stop, terminator):
-    if records[0] >= stop:
+    if stop is not None and records[0] >= stop:
         raise _ZSSMapStop()
     if records[0] < start:
         records = records[bisect_left(records, start):]
-    if records[-1] >= stop:
+    if stop is not None and records[-1] >= stop:
         records = records[:bisect_left(records, stop)]
     records.append(b"")
     return terminator.join(records)
@@ -204,13 +205,15 @@ class ZSS(object):
             # XX put an upper bound on this
             workers = multiprocessing.cpu_count()
         self._workers = workers
+        if self._workers < 1:
+            raise ZSSError("workers must be >= 1")
         if workers == 1:
             self._executor = SerialExecutor()
         else:
             self._executor = ProcessPoolExecutor(workers)
 
     def _get_header(self):
-        chunk = self._transport.read_chunk(0, HEADER_SIZE_GUESS)
+        chunk = self._transport.chunk_read(0, HEADER_SIZE_GUESS)
         stream = BytesIO(chunk)
 
         magic = read_n(stream, len(MAGIC))
@@ -225,7 +228,7 @@ class ZSS(object):
         needed = header_data_length + CRC_LENGTH
         remaining = len(chunk) - stream.tell()
         if remaining < needed:
-            rest = self._transport.read_chunk(len(chunk), needed - remaining)
+            rest = self._transport.chunk_read(len(chunk), needed - remaining)
             stream = BytesIO(stream.read() + rest)
 
         header_encoded = read_n(stream, header_data_length)
@@ -246,7 +249,7 @@ class ZSS(object):
         zdata = stream.read(zdata_length)
         return (block_level, zdata)
 
-    def _get_block(self, offset, block_length):
+    def _get_index_block(self, offset, block_length):
         chunk = self._transport.chunk_read(offset, block_length)
         block_level = ord(chunk[0])
         assert block_level > 0
@@ -267,9 +270,9 @@ class ZSS(object):
         offset = self._root_index_offset
         block_length = self._root_index_length
         while True:
-            block_level, values = self._get_block(offset, block_length)
+            block_level, values = self._get_index_block(offset, block_length)
             assert block_level > 0
-            keys, voffsets, block_lengths = values
+            keys, offsets, block_lengths = values
             # This gives us the index of the first block whose *first* entry
             # is >= the needle.
             idx = bisect_left(keys, needle)
@@ -312,27 +315,47 @@ class ZSS(object):
             stop_offset = self._find_ge_key(stop, False)
         return self._transport.stream_read(start_offset, stop_offset)
 
+    # This is a powerful, low-level function, which is somewhat fiddly to
+    # use. (But all the more user-friendly functions are implemented in terms
+    # of it.)
+    #
+    # It finds all blocks which may contain records that are >= start, and
+    # then for each such block it calls
+    #
+    #   fn(block_level, zdata, stop, *args, **kwargs)
+    #
+    # Key points:
+    # - If skip_index is true, then it skips over index blocks (i.e.,
+    #   block_level will always be 0).
+    # - These calls are performed in parallel on however many workers were
+    #   configured when this ZSS object was created; therefore, fn, args, and
+    #   kwargs must all be pickleable.
+    # - The iteration may or may not stop when the 'stop' key is reached. If
+    #   you want it to stop for sure at any point, you must either (a) raise a
+    #   _ZSSMapStop from your callback function, or (b) call .close() on this
+    #   generator.
     def _map_raw_block(self, start, stop, skip_index, fn, *args, **kwargs):
-        stream = self._sloppy_stream(start, stop)
-        q = deque()
-        eof = False
-        try:
-            while not eof or q:
-                while not eof and len(q) < self._workers:
-                    block_level, zdata = self._get_next_raw_block(stream)
-                    if block_level is None:
-                        eof = True
-                        continue
-                    if skip_index and block_level > 0:
-                        continue
-                    q.append(self._executor.submit(fn, block_level, zdata,
-                                                   stop, *args, **kwargs))
-                yield q.popleft().result()
-        except _ZSSMapStop:
-            pass
-        finally:
-            while q:
-                q.pop().cancel()
+        with closing(self._sloppy_stream(start, stop)) as stream:
+            q = deque()
+            eof = False
+            try:
+                while q or not eof:
+                    while not eof and len(q) < self._workers:
+                        block_level, zdata = self._get_next_raw_block(stream)
+                        if block_level is None:
+                            eof = True
+                            continue
+                        if skip_index and block_level > 0:
+                            continue
+                        q.append(self._executor.submit(fn, block_level, zdata,
+                                                       stop, *args, **kwargs))
+                    if q:
+                        yield q.popleft().result()
+            except _ZSSMapStop:
+                pass
+            finally:
+                while q:
+                    q.pop().cancel()
 
     def sloppy_block_search(self, start=None, stop=None, prefix=None):
         start, stop = self._norm_search_args(start, stop, prefix)
@@ -341,7 +364,7 @@ class ZSS(object):
                          _decompress_helper, self._decompress)) as it:
             for data in it:
                 records = unpack_data_records(data)
-                if records[0] >= stop:
+                if stop is not None and records[0] >= stop:
                     break
                 yield records
 
@@ -366,7 +389,7 @@ class ZSS(object):
             for records in block_iter:
                 if records[0] < start:
                     records = records[bisect_left(records, start):]
-                if records[-1] >= stop:
+                if stop is not None and records[-1] >= stop:
                     records = records[:bisect_left(records, stop)]
                 for record in records:
                     yield record

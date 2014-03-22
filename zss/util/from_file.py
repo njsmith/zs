@@ -19,7 +19,7 @@ def main(progname, args):
     parser = argparse.ArgumentParser(progname, description=DESC)
     parser.add_argument("input")
     parser.add_argument("output_zss")
-    parser.add_argument("--separator", default="\\n")
+    parser.add_argument("--terminator", default="\\n")
     parser.add_argument("--branching-factor", default=1024, type=int)
     parser.add_argument("--approx-block-size", default=131072, type=int)
     parser.add_argument("-j", "--parallelism",
@@ -33,7 +33,7 @@ def main(progname, args):
                         dest="show_spinner", default=True)
 
     args = parser.parse_args(args)
-    sep = args.separator.decode("string_escape")
+    terminator = args.terminator.decode("string_escape")
     metadata = json.loads(args.metadata)
     compress_kwargs = {}
     if args.compress_level is not None:
@@ -47,7 +47,7 @@ def main(progname, args):
                            uuid=args.uuid,
                            show_spinner=args.show_spinner)
     sys.stderr.write("zss: Reading input\n")
-    writer.from_file(open(args.input, "rb"), sep=sep)
+    writer.from_file(open(args.input, "rb"), terminator=terminator)
     sys.stderr.write("zss: Done\n")
 
 if __name__ == "__main__":

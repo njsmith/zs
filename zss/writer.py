@@ -108,6 +108,10 @@ class ZSSWriter(object):
         # Put an invalid CRC on the initial header as well, for good measure
         self._file.write(b"\x00" * CRC_LENGTH)
 
+        # It is critical that we flush the file before we re-open it in append
+        # mode in the writer process!
+        self._file.flush()
+
         self._next_job = 0
         assert parallelism > 0
         self._compress_queue = multiprocessing.Queue(2 * parallelism)
@@ -152,27 +156,26 @@ class ZSSWriter(object):
 
     def close(self):
         # Stop all the processing queues and wait for them to finish.
-        sys.stdout.write("Closing\n")
+        sys.stderr.write("\rzss: Waiting for write thread to finish\n")
         for i in xrange(self._parallelism):
             self._compress_queue.put(_QUIT)
         for compressor in self._compressors:
             compressor.join()
-        sys.stdout.write("All compressors finished; waiting for writer\n")
+        #sys.stdout.write("All compressors finished; waiting for writer\n")
         # All compressors have now finished their work, and submitted
         # everything to the write queue.
         self._write_queue.put(_QUIT)
         self._writer.join()
-        sys.stdout.write("Writer finished, getting root index offset\n")
-        root_index_offset, root_index_len = self._finish_queue.get()
-        sys.stdout.write("Root index offset: %s\n" % (root_index_offset,))
-        sys.stdout.write("Root index length: %s\n" % (root_index_len,))
+        sys.stderr.write("\rzss: All data written; updating header\n")
+        root_index_offset, root_index_length = self._finish_queue.get()
+        sys.stderr.write("zss: Root index offset: %s\n" % (root_index_offset,))
         # Now we have the root offset; write it to the header.
         self._header["root_index_offset"] = root_index_offset
         self._header["root_index_length"] = root_index_length
         new_encoded_header = _encode_header(self._header)
         self._file.seek(len(MAGIC))
         # Read the header length and make sure it hasn't changed
-        old_length = read_format(self._file, header_data_length_format)
+        old_length, = read_format(self._file, header_data_length_format)
         if old_length != len(new_encoded_header):
             raise ZSSError("header data length changed")
         self._file.write(new_encoded_header)
@@ -230,7 +233,7 @@ def _write_worker(path, branching_factor,
         if job is _QUIT:
             assert not pending_jobs
             root_offset, root_len = data_appender.close_and_get_root_offset()
-            finish_queue.put(root)
+            finish_queue.put((root_offset, root_len))
             return
         pending_jobs[job[0]] = job[1:]
         while wanted_job in pending_jobs:
@@ -252,6 +255,7 @@ class _ZSSDataAppender(object):
         # just in case...
         self._file.seek(0, 2)
         self._offset = self._file.tell()
+        assert self._offset > 0
 
         self._branching_factor = branching_factor
         self._compress_fn = compress_fn
@@ -265,12 +269,11 @@ class _ZSSDataAppender(object):
         self._level_lengths = []
 
     def write_block(self, level, first_record, last_record, zdata):
-        if not (0 < level <= MAX_LEVEL):
+        if not (0 <= level <= MAX_LEVEL):
             raise ZSSError("invalid level %s" % (level,))
 
         block_offset = self._offset
-        block_prefix = struct.pack(block_prefix_format,
-                                   level, len(zdata))
+        block_prefix = struct.pack(block_prefix_format, level, len(zdata))
         self._file.write(block_prefix)
         self._file.write(zdata)
         total_block_length = len(block_prefix) + len(zdata)
@@ -301,6 +304,8 @@ class _ZSSDataAppender(object):
         block_lengths = [entry[3] for entry in entries]
         data = pack_index_records(keys, offsets, block_lengths,
                                   # Just a random guess at average record size
+                                  # Doesn't have to be accurate, just reduces
+                                  # reallocs if it is.
                                   self._branching_factor * 300)
         zdata = self._compress_fn(data, **self._compress_kwargs)
         first_record = entries[0][0]
@@ -308,17 +313,35 @@ class _ZSSDataAppender(object):
         self.write_block(level + 1, first_record, last_record, zdata)
 
     def close_and_get_root_offset(self):
-        for level in xrange(MAX_LEVEL):
-            self._flush_index(level)
-            # This created an entry at level + 1. If level + 1 is the highest
-            # level we've ever created, AND this entry we just created is the
-            # only element at that level, then the block we just flushed is
-            # the only block at 'level' that we will ever create. That means
-            # that it's the root block, so we return its offset and length.
-            if (level + 1 == len(self._level_entries) - 1
-                and len(self._level_entries[level + 1]) == 1):
-                _flush_file(self._file)
-                self._file.close()
-                root_entry = self._level_entries[level + 1][0]
-                return root_entry[-2:]
+        # We need to create index blocks referring to all dangling
+        # unreferenced blocks. If at any point we have only a single
+        # unreferenced index block, then this is our root index.
+        def have_root():
+            # Useful invariant: we know that there is always at least one
+            # unreferenced block at the highest level.
+            assert len(self._level_entries[-1]) > 0
+            # If all we have are data blocks, then we aren't done; root must
+            # be an index block.
+            if len(self._level_entries) == 1:
+                return False
+            # If there's a non-referenced at the non-highest level, we aren't
+            # done.
+            for entries in self._level_entries[:-1]:
+                if entries:
+                    return False
+            # If the highest level has multiple blocks, we aren't done.
+            if len(self._level_entries[-1]) > 1:
+                return False
+            # Otherwise, we are done!
+            return True
+
+        while not have_root():
+            for level in xrange(MAX_LEVEL):
+                if self._level_entries[level]:
+                    self._flush_index(level)
+                    break
+        _flush_file(self._file)
+        self._file.close()
+        root_entry = self._level_entries[-1][0]
+        return root_entry[-2:]
         assert False
