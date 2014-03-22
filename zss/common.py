@@ -1,3 +1,7 @@
+# This file is part of ZSS
+# Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
+# See file LICENSE.txt for license information.
+
 # Compressed Sorted Sets
 # A static database for range queries on compressible data.
 

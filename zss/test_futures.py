@@ -1,3 +1,7 @@
+# This file is part of ZSS
+# Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
+# See file LICENSE.txt for license information.
+
 from .futures import ProcessPoolExecutor, SerialExecutor
 
 def square(x):
@@ -17,4 +21,3 @@ def test_futures():
     _do_executor_test(ProcessPoolExecutor(3))
     _do_executor_test(ProcessPoolExecutor(1))
     _do_executor_test(SerialExecutor())
-
