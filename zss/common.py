@@ -1,34 +1,13 @@
 # Compressed Sorted Sets
 # A static database for range queries on compressible data.
 
-# TODO:
-# - use relative offsets to allow for cheap subsetting
-# - maybe add a new block type (new rule: blocks with high bit set, >= 128,
-#   are special) to indicate a span that is missing?
-# - replace each voffset with a block reference that has both relative offset
-#   *and* length of the block that is referred to, to halve round-trips when
-#   accessing a zss file over a dumb transport like HTTP or NFS
-# - then write a tool that given a URL fetches a subset
-#
-# ...But does anyone actually care about getting all and only the "a" ngrams?
-# In actual use, being able to fetch a span over a dumb transport is very
-# useful, but then what?  I guess the use is that if we can easily represent
-# the result of such a query as a ZSS file then it saves some hassle -- e.g.,
-# it means you aren't forced to immediately decompress what you fetch? ...but
-# again, who cares?
-
 # Data model: we have a set of variable-length opaque bitstrings. We want to
 # store them compressed, but be able to efficiently perform range queries,
 # i.e., read out all bitstrings which are in the range [low, high).
 
 # Storage model:
 #
-# Data is stored in a large, flat, file, indexed by virtual offsets
-# (voffsets). voffsets are not file offsets. They start at 0 at the beginning
-# of the data, and count uniformly from there, ignoring the header and its
-# checksum. This is a carryover from a previous version of the file format
-# that supported multi-file archives; it may be useful again in the future if
-# we re-add that support.
+# Data is stored in a large, flat, file, indexed by byte offsets.
 #
 # The file has the format:
 #
@@ -36,19 +15,20 @@
 # HEADER := header_data_length header_data header_data_crc32c
 # header_data_length, header_data_crc32c := little-endian uint32
 # header_data := (see below)
-# BLOCK := level block_length compress(BLOCK_DATA)
+# BLOCK := level zdata_length compress(BLOCK_DATA)
 # level := uint8
-# block_length := uleb128
+# zdata_length := uint64
 # if level = 0x00:
 #   BLOCK_DATA := (record_length data_record)*
 # if level > 0x00:
-#   BLOCK_DATA := (record_length index_record block_voffset)*
+#   BLOCK_DATA := (record_length index_record block_offset block_length)*
 # record_length := uleb128
-# block_voffset := uleb128
+# block_offset := uleb128
+# block_length := uleb128
 # data_record, index_record := arbitrary 8-bit data
 #
 # Invariants:
-# a) Given two data_records, record1 and record2, at voffset n1 and n2,
+# a) Given two data_records, record1 and record2, at offset n1 and n2,
 #    n1 <= n2 numerically implies that record1 <= record2 in memcmp() order
 #    (with end-of-string sorting before all other values).
 # b) For every DATA_BLOCK Bi there is a corresponding index_record Ri.
@@ -63,7 +43,8 @@ import zss._zss
 
 CRC_LENGTH = 4
 
-MAX_LEVEL = 255
+# Reserve the top half of the levels for future extension
+MAX_LEVEL = 127
 
 # "ZSS", three bytes from urandom, and 2 bytes to serve as a version
 # identifier in case that turns out to be useful.
@@ -73,8 +54,10 @@ MAGIC = "ZSS\x1c\x8e\x6c\x00\x01"
 INCOMPLETE_MAGIC = "SSZ\x1c\x8e\x6c\x00\x01"
 header_data_length_format = "<I"
 header_data_format = [
-    # The voffset of the top-level index block.
-    ("root_index_voffset", "<Q"),
+    # The offset of the top-level index block.
+    ("root_index_offset", "<Q"),
+    # The length of the top-level index block.
+    ("root_index_length", "<Q"),
     # A unique identifier for this archive.
     ("uuid", "16s"),
     # A null-padded code for the storage algorithm used. So far:
@@ -85,8 +68,8 @@ header_data_format = [
     # "<I" giving length, then arbitrary utf8-encoded json
     ("metadata", "length-prefixed-utf8-json"),
     ]
-header_offset = (len(MAGIC)
-                 + struct.calcsize(header_data_length_format))
+
+block_prefix_format = "<BQ"
 
 class ZSSError(Exception):
     pass
@@ -115,6 +98,7 @@ def none_crc32c_decompress(compressed_data):
         raise ZSSCorrupt("checksum mismatch")
     return data
 
+# These callables must be pickleable for multiprocessing.
 codecs = {
     "zlib": (zlib_compress, zlib.decompress),
     "bz2": (bz2_compress, bz2.decompress),

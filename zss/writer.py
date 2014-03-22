@@ -17,10 +17,10 @@ from zss.common import (ZSSError,
                         encoded_crc32c,
                         header_data_format,
                         header_data_length_format,
-                        header_offset,
+                        block_length_format,
                         codecs,
                         read_format)
-from zss._zss import (pack_data_records, pack_index_records, to_uleb128)
+from zss._zss import pack_data_records, pack_index_records
 
 def _flush_file(f):
     f.flush()
@@ -35,7 +35,7 @@ def _encode_header(header):
             bytes.append(encoded)
         else:
             bytes.append(struct.pack(format, header[field]))
-    return "".join(bytes)
+    return b"".join(bytes)
 
 # A sentinel used to signal that a worker should quit.
 class _QUIT(object):
@@ -71,7 +71,8 @@ class ZSSWriter(object):
             uuid = uuid4().bytes
         self.uuid = uuid
         self._header = {
-            "root_index_voffset": 2 ** 63 - 1,
+            "root_index_offset": 2 ** 63 - 1,
+            "root_index_length": 0,
             "uuid": uuid,
             "compression": self.compression,
             "metadata": self.metadata,
@@ -83,8 +84,7 @@ class ZSSWriter(object):
                                      len(encoded_header)))
         self._file.write(encoded_header)
         # Put an invalid CRC on the initial header as well, for good measure
-        self._file.write("\x00" * CRC_LENGTH)
-        data_offset = self._file.tell()
+        self._file.write(b"\x00" * CRC_LENGTH)
 
         self._next_job = 0
         assert parallelism > 0
@@ -101,7 +101,7 @@ class ZSSWriter(object):
             p.start()
             self._compressors.append(p)
         writer_args = (self._path,
-                       data_offset, self.branching_factor,
+                       self.branching_factor,
                        self._compress_fn, self._compress_kwargs,
                        self._write_queue, self._finish_queue,
                        self._show_spinner)
@@ -109,8 +109,8 @@ class ZSSWriter(object):
                                                args=writer_args)
         self._writer.start()
 
-    def from_file(self, file_handle, sep="\n"):
-        partial_record = ""
+    def from_file(self, file_handle, terminator=b"\n"):
+        partial_record = b""
         next_job = self._next_job
         read = file_handle.read
         compress_queue_put = self._compress_queue.put
@@ -123,8 +123,8 @@ class ZSSWriter(object):
                 self.close()
                 return
             buf = partial_record + buf
-            buf, partial_record = buf.rsplit(sep, 1)
-            compress_queue_put((next_job, "chunk-sep", buf, sep))
+            buf, partial_record = buf.rsplit(terminator, 1)
+            compress_queue_put((next_job, "chunk-sep", buf, terminator))
             next_job += 1
         self._next_job = next_job
 
@@ -140,11 +140,13 @@ class ZSSWriter(object):
         # everything to the write queue.
         self._write_queue.put(_QUIT)
         self._writer.join()
-        sys.stdout.write("Writer finished, getting root index voffset\n")
-        root_index_voffset = self._finish_queue.get()
-        sys.stdout.write("Root index voffset: %s\n" % (root_index_voffset,))
-        # Now we have the root voffset; write it to the header.
-        self._header["root_index_voffset"] = root_index_voffset
+        sys.stdout.write("Writer finished, getting root index offset\n")
+        root_index_offset, root_index_len = self._finish_queue.get()
+        sys.stdout.write("Root index offset: %s\n" % (root_index_offset,))
+        sys.stdout.write("Root index length: %s\n" % (root_index_len,))
+        # Now we have the root offset; write it to the header.
+        self._header["root_index_offset"] = root_index_offset
+        self._header["root_index_length"] = root_index_length
         new_encoded_header = _encode_header(self._header)
         self._file.seek(len(MAGIC))
         # Read the header length and make sure it hasn't changed
@@ -190,11 +192,11 @@ def _compress_worker(approx_block_size, compress_fn, compress_kwargs,
         #sys.stderr.write("compress_worker: putting\n")
         put((idx, records[0], records[-1], zdata))
 
-def _write_worker(path, data_offset, branching_factor,
+def _write_worker(path, branching_factor,
                   compress_fn, compress_kwargs,
                   write_queue, finish_queue,
                   show_spinner):
-    data_appender = _ZSSDataAppender(path, data_offset, branching_factor,
+    data_appender = _ZSSDataAppender(path, branching_factor,
                                      compress_fn, compress_kwargs)
     pending_jobs = {}
     wanted_job = 0
@@ -205,7 +207,7 @@ def _write_worker(path, data_offset, branching_factor,
         #sys.stderr.write("write_worker: got\n")
         if job is _QUIT:
             assert not pending_jobs
-            root = data_appender.close_and_get_root_voffset()
+            root_offset, root_len = data_appender.close_and_get_root_offset()
             finish_queue.put(root)
             return
         pending_jobs[job[0]] = job[1:]
@@ -222,20 +224,18 @@ def _write_worker(path, data_offset, branching_factor,
 # overhead that handling it in serial with the actual writes won't create a
 # bottleneck...
 class _ZSSDataAppender(object):
-    def __init__(self, path, data_offset,
-                 branching_factor, compress_fn, compress_kwargs):
+    def __init__(self, path, branching_factor, compress_fn, compress_kwargs):
         self._file = open(path, "ab")
         # Opening in append mode should put us at the end of the file, but
         # just in case...
         self._file.seek(0, 2)
-        self._data_offset = data_offset
-        self._voffset = self._file.tell() - data_offset
+        self._offset = self._file.tell()
 
         self._branching_factor = branching_factor
         self._compress_fn = compress_fn
         self._compress_kwargs = compress_kwargs
         # For each level, a list of entries
-        # each entry is a tuple (first_record, last_record, voffset)
+        # each entry is a tuple (first_record, last_record, offset)
         # last_record is kept around to ensure that records at each level are
         # sorted and non-overlapping, and because in principle we could use
         # them to find shorter keys (XX).
@@ -243,11 +243,17 @@ class _ZSSDataAppender(object):
         self._level_lengths = []
 
     def write_block(self, level, first_record, last_record, zdata):
-        assert level <= MAX_LEVEL
-        block_voffset = self._voffset
-        combined_buf = chr(level) + to_uleb128(len(zdata)) + zdata
-        self._voffset += len(combined_buf)
-        self._file.write(combined_buf)
+        if not (0 < level <= MAX_LEVEL):
+            raise ZSSError("invalid level %s" % (level,))
+
+        block_offset = self._offset
+        block_prefix = struct.pack(block_prefix_format,
+                                   level, len(zdata))
+        self._file.write(block_prefix)
+        self._file.write(zdata)
+        total_block_length = len(block_prefix) + len(zdata)
+        self._offset += total_block_length
+
         if level >= len(self._level_entries):
             # First block we've seen at this level
             assert level == len(self._level_entries)
@@ -256,7 +262,8 @@ class _ZSSDataAppender(object):
             for i in xrange(level):
                 assert not self._level_entries[i]
         entries = self._level_entries[level]
-        entries.append((first_record, last_record, block_voffset))
+        entries.append((first_record, last_record,
+                        block_offset, total_block_length))
         if len(entries) >= self._branching_factor:
             self._flush_index(level)
 
@@ -268,8 +275,9 @@ class _ZSSDataAppender(object):
             if entries[i][0] < entries[i - 1][1]:
                 raise ZSSError("non-sorted spans")
         keys = [entry[0] for entry in entries]
-        voffsets = [entry[2] for entry in entries]
-        data = pack_index_records(keys, voffsets,
+        offsets = [entry[2] for entry in entries]
+        block_lengths = [entry[3] for entry in entries]
+        data = pack_index_records(keys, offsets, block_lengths,
                                   # Just a random guess at average record size
                                   self._branching_factor * 300)
         zdata = self._compress_fn(data, **self._compress_kwargs)
@@ -277,18 +285,18 @@ class _ZSSDataAppender(object):
         last_record = entries[-1][1]
         self.write_block(level + 1, first_record, last_record, zdata)
 
-    def close_and_get_root_voffset(self):
+    def close_and_get_root_offset(self):
         for level in xrange(MAX_LEVEL):
             self._flush_index(level)
             # This created an entry at level + 1. If level + 1 is the highest
             # level we've ever created, AND this entry we just created is the
             # only element at that level, then the block we just flushed is
             # the only block at 'level' that we will ever create. That means
-            # that it's the root block, so we return its voffset.
+            # that it's the root block, so we return its offset and length.
             if (level + 1 == len(self._level_entries) - 1
                 and len(self._level_entries[level + 1]) == 1):
                 _flush_file(self._file)
                 self._file.close()
                 root_entry = self._level_entries[level + 1][0]
-                return root_entry[-1]
+                return root_entry[-2:]
         assert False

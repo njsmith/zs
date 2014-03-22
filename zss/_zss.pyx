@@ -55,12 +55,18 @@ cdef int write_uleb128(uint64_t value, char * buffer):
             break
     return written
 
-def to_uleb128(uint64_t i):
-    cdef char buffer[_MAX_ULEB128_LENGTH]
-    cdef int written
-    written = write_uleb128(i, buffer)
-    assert written <= _MAX_ULEB128_LENGTH
-    return PyBytes_FromStringAndSize(buffer, written)
+def cython_test_write_uleb128():
+   cdef buf[_MAX_ULEB128_LENGTH]
+   for (value, expected) in [(0, b"\x00"),
+                             (0x10, b"\x10"),
+                             (0x81, b"\x81\x01"),
+                             (0x7f, b"\x7f"),
+                             (0x107f, b"\xff\x20"),
+                             (1 << 43, b"\x80\x80\x80\x80\x80\x80\x02"),
+                             ]:
+      assert write_uleb128(value, buf) == len(expected)
+      for i in range(len(expected)):
+         assert ord(expected[i]) == buf[i]
 
 cdef uint64_t read_uleb128(char * buf, size_t buf_len, size_t * offset) except? 0:
     cdef uint64_t value = 0
@@ -82,19 +88,6 @@ cdef uint64_t read_uleb128(char * buf, size_t buf_len, size_t * offset) except? 
                 raise zss.ZSSCorrupt("unnormalized uleb128")
             return value
         shift += 7
-
-def from_uleb128(py_buf):
-    """Returns (uleb128 value, number of bytes read).
-
-    Making sure that the buffer contains enough bytes is your problem. Raises
-    ZSSCorrupt if it doesn't."""
-    cdef char * buf
-    cdef Py_ssize_t buf_len
-    cdef size_t offset
-    PyBytes_AsStringAndSize(py_buf, &buf, &buf_len)
-    offset = 0
-    cdef uint64_t value = read_uleb128(buf, buf_len, &offset)
-    return (value, offset)
 
 def cython_test_read_uleb128():
     cdef char * buf
@@ -152,18 +145,23 @@ def cython_test_read_uleb128():
 ################################################################
 
 def pack_data_records(list records, size_t alloc_hint):
-    return _pack_records(records, None, alloc_hint)
+    return _pack_records(records, None, None, alloc_hint)
 
-def pack_index_records(list records, list offsets, size_t alloc_hint):
-    return _pack_records(records, offsets, alloc_hint)
+def pack_index_records(list records, list offsets, list lengths,
+                       size_t alloc_hint):
+    return _pack_records(records, offsets, lengths, alloc_hint)
 
 cdef bytes _pack_records(list records,
                          list voffsets,
+                         list block_lengths,
                          size_t alloc_hint):
     if voffsets is not None:
         if len(records) != len(voffsets):
             raise ValueError("len(records) == %s, len(voffsets) == %s"
                              % (len(records), len(voffsets)))
+        if len(records) != len(block_lengths):
+            raise ValueError("len(records) == %s, len(block_lengths) == %s"
+                             % (len(records), len(block_lengths)))
     cdef size_t written = 0
     cdef size_t bufsize = alloc_hint
     cdef size_t new_bufsize
@@ -199,6 +197,7 @@ cdef bytes _pack_records(list records,
                         raise zss.ZSSError("blocks are not sorted: offset %s "
                                            "comes after %s"
                                            % (voffsets[i], voffsets[i - 1]))
+                written += write_uleb128(block_lengths[i], buf + written)
             previous_c_data = c_data
             previous_c_length = c_length
         return PyBytes_FromStringAndSize(buf, written)
@@ -218,11 +217,13 @@ cdef tuple _unpack_records(bint is_index, bytes block):
     cdef Py_ssize_t buf_len
     PyBytes_AsStringAndSize(block, &buf, &buf_len)
     cdef size_t offset = 0
-    cdef uint64_t record_length, block_voffset
+    cdef uint64_t record_length, voffset, block_length
     cdef list records = []
     cdef list voffsets = None
+    cdef list block_lengths = None
     if is_index:
         voffsets = []
+        block_lengths = []
     while offset < buf_len:
         record_length = read_uleb128(buf, buf_len, &offset)
         if offset + record_length > buf_len:
@@ -236,5 +237,7 @@ cdef tuple _unpack_records(bint is_index, bytes block):
         if is_index:
             voffset = read_uleb128(buf, buf_len, &offset)
             voffsets.append(voffset)
+            block_length = read_uleb128(buf, buf_len, &offset)
+            block_lengths.append(block_lengths)
     assert offset == buf_len
-    return records, voffsets
+    return records, voffsets, block_lengths

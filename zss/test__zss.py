@@ -19,21 +19,11 @@ def test_crc32c():
         print hex(crc32c(data))
         assert result == crc32c(data)
 
-def test_to_uleb128():
-    assert to_uleb128(0) == b"\x00"
-    assert to_uleb128(0x10) == b"\x10"
-    assert to_uleb128(0x81) == b"\x81\x01"
-    assert to_uleb128(0x7f) == b"\x7f"
-    assert to_uleb128(0x107f) == b"\xff\x20"
-    assert to_uleb128(1 << 43) == b"\x80\x80\x80\x80\x80\x80\x02"
+def test_write_uleb128():
+    cython_test_write_uleb128()
 
 def test_read_uleb128():
     cython_test_read_uleb128()
-
-def test_from_uleb128():
-    assert from_uleb128("\x10xxx") == (0x10, 1)
-    assert from_uleb128("\x80\x10xxx") == (1 << 11, 2)
-    assert_raises(zss.ZSSCorrupt, from_uleb128, "\x80")
 
 def test_data_records():
     records = ["", "\x00" * 16, "a", "b"]
