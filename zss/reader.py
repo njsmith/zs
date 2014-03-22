@@ -29,7 +29,7 @@
 import sys
 import struct
 import json
-from cStringIO import StringIO
+from six import BytesIO
 from bisect import bisect_left
 import re
 from contextlib import closing
@@ -59,7 +59,7 @@ HEADER_SIZE_GUESS = 8192
 
 def _decode_header_data(encoded):
     fields = {}
-    f = StringIO(encoded)
+    f = BytesIO(encoded)
     for (field, field_format) in header_data_format:
         if field_format == "length-prefixed-utf8-json":
             length, = read_format(f, "<I")
@@ -149,7 +149,7 @@ class _HTTPStream(object):
         for chunk in self._response.iter_content(length):
             offset += len(chunk)
             return chunk
-        return ""
+        return b""
 
     def close(self):
         self._response.close()
@@ -176,7 +176,7 @@ def _dump_helper(records, start, stop, terminator):
         records = records[bisect_left(records, start):]
     if records[-1] >= stop:
         records = records[:bisect_left(records, stop)]
-    records.append("")
+    records.append(b"")
     return terminator.join(records)
 
 class ZSS(object):
@@ -211,7 +211,7 @@ class ZSS(object):
 
     def _get_header(self):
         chunk = self._transport.read_chunk(0, HEADER_SIZE_GUESS)
-        stream = StringIO(chunk)
+        stream = BytesIO(chunk)
 
         magic = read_n(stream, len(MAGIC))
         if magic == INCOMPLETE_MAGIC:
@@ -226,7 +226,7 @@ class ZSS(object):
         remaining = len(chunk) - stream.tell()
         if remaining < needed:
             rest = self._transport.read_chunk(len(chunk), needed - remaining)
-            stream = StringIO(stream.read() + rest)
+            stream = BytesIO(stream.read() + rest)
 
         header_encoded = read_n(stream, header_data_length)
         header_crc = read_n(stream, CRC_LENGTH)
@@ -288,7 +288,7 @@ class ZSS(object):
     def _norm_search_args(self, start, stop, prefix):
         # we intersect start/stop/prefix together
         if start is None:
-            start = ""
+            start = b""
         # unfortunately, there is no concrete value we can put for "stop" that
         # is equivalent to leaving it unspecified, so we have to do some
         # if-then-wrangling below.
@@ -375,7 +375,7 @@ class ZSS(object):
         return self.search()
 
     def dump(self, out_file, start=None, stop=None, prefix=None,
-             terminator="\n"):
+             terminator=b"\n"):
         start, stop = self._norm_search_args(start, stop, prefix)
         sbm = self.sloppy_block_map
         with closing(sbm(_dump_helper,

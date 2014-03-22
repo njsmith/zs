@@ -20,11 +20,12 @@ setup(
     author_email="njs@pobox.com",
     packages=["zss"],
     url="https://github.com/njsmith/zss",
+    install_requires=["six"],
     classifiers =
       [ "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)",
+        "License :: OSI Approved :: BSD License",
         "Programming Language :: Python :: 2",
         ],
     cmdclass={"build_ext": build_ext},
