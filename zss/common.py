@@ -114,4 +114,4 @@ def read_n(f, n):
 def read_format(f, struct_format):
     length = struct.calcsize(struct_format)
     data = read_n(f, length)
-    return struct.unpack(struct_format, data)[0]
+    return struct.unpack(struct_format, data)

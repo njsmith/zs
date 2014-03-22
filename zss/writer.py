@@ -17,7 +17,7 @@ from zss.common import (ZSSError,
                         encoded_crc32c,
                         header_data_format,
                         header_data_length_format,
-                        block_length_format,
+                        block_prefix_format,
                         codecs,
                         read_format)
 from zss._zss import pack_data_records, pack_index_records
@@ -36,6 +36,24 @@ def _encode_header(header):
         else:
             bytes.append(struct.pack(format, header[field]))
     return b"".join(bytes)
+
+def test__encode_header():
+    got = _encode_header({
+        "root_index_offset": 0x1234567890123456,
+        "root_index_length": 0x2468864213577531,
+        "uuid": b"abcdefghijklmnop",
+        "compression": "superzip",
+        "metadata": {"this": "is", "awesome": 10},
+        })
+    expected_metadata = b"{\"this\": \"is\", \"awesome\": 10}"
+    expected = (b"\x56\x34\x12\x90\x78\x56\x34\x12"
+                b"\x31\x75\x57\x13\x42\x86\x68\x24"
+                b"abcdefghijklmnop"
+                b"superzip\x00\x00\x00\x00\x00\x00\x00\x00"
+                # hex(len(expected_metadata)) == 0x1d
+                b"\x1d\x00\x00\x00"
+                + expected_metadata)
+    assert got == expected
 
 # A sentinel used to signal that a worker should quit.
 class _QUIT(object):

@@ -31,19 +31,18 @@ import re
 from contextlib import closing
 from collections import namedtuple, deque
 import multiprocessing
-from concurrent.futures import ThreadPoolExecuter, ProcessPoolExecuter
-from zss.common import (ZSSCorrupt,
-                        MAGIC,
-                        INCOMPLETE_MAGIC,
-                        encoded_crc32c,
-                        CRC_LENGTH,
-                        header_data_length_format,
-                        header_data_format,
-                        header_framing,
-                        block_length_format,
-                        codecs,
-                        read_n,
-                        read_format)
+from .futures import SerialExecutor, ProcessPoolExecutor
+from .common import (ZSSCorrupt,
+                     MAGIC,
+                     INCOMPLETE_MAGIC,
+                     encoded_crc32c,
+                     CRC_LENGTH,
+                     header_data_length_format,
+                     header_data_format,
+                     block_prefix_format,
+                     codecs,
+                     read_n,
+                     read_format)
 from zss._zss import unpack_data_records, unpack_index_records
 
 # How much data to read from the header on our first request on slow
@@ -59,11 +58,11 @@ def _decode_header_data(encoded):
     f = StringIO(encoded)
     for (field, field_format) in header_data_format:
         if field_format == "length-prefixed-utf8-json":
-            length = read_format(f, "<I")
+            length, = read_format(f, "<I")
             data = read_n(f, length)
             fields[field] = json.loads(data, encoding="utf-8")
         else:
-            fields[field] = read_format(f, field_format)
+            fields[field], = read_format(f, field_format)
     return fields
 
 class FileTransport(object):
@@ -202,9 +201,9 @@ class ZSS(object):
             workers = multiprocessing.cpu_count()
         self._workers = workers
         if workers == 1:
-            self._executor = ThreadPoolExecuter(workers)
+            self._executor = SerialExecutor()
         else:
-            self._executor = ProcessPoolExecuter(workers)
+            self._executor = ProcessPoolExecutor(workers)
 
     def _get_header(self):
         chunk = self._transport.read_chunk(0, HEADER_SIZE_GUESS)
@@ -217,7 +216,7 @@ class ZSS(object):
         if magic != MAGIC:
             raise ZSSCorrupt("%s: bad magic number (are you sure this is "
                              "a ZSS file?)" % (self._path))
-        header_data_length = read_format(stream, header_data_length_format)
+        header_data_length, = read_format(stream, header_data_length_format)
 
         needed = header_data_length + CRC_LENGTH
         remaining = len(chunk) - stream.tell()
