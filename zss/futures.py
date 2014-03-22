@@ -4,11 +4,11 @@
 #
 # We prefer to use concurrent.futures to raw multiprocessing, when available,
 # because concurrent.futures is more robust against things like the user
-# hitting control-C (e.g.: "Changed in version 3.3: When one of the worker
-# processes terminates abruptly, a BrokenProcessPool error is now
-# raised. Previously, behaviour was undefined but operations on the executor
-# or its futures would often freeze or deadlock." AFAICT no similar fixes have
-# ever been applied to multiprocessing.Pool.)
+# hitting control-C (e.g. from the manual: "Changed in version 3.3: When one
+# of the worker processes terminates abruptly, a BrokenProcessPool error is
+# now raised. Previously, behaviour was undefined but operations on the
+# executor or its futures would often freeze or deadlock." AFAICT no similar
+# fixes have ever been applied to multiprocessing.Pool.)
 #
 # But, concurrent.futures is available on py3 only.
 #
@@ -39,7 +39,7 @@ class _SerialFuture(object):
 
 class SerialExecutor(object):
     def submit(self, fn, *args, **kwargs):
-        return _NonParallelFuture(fn(*args, **kwargs))
+        return _SerialFuture(fn(*args, **kwargs))
 
 if not have_process_pool_executor:
     # then fake it!
