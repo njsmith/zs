@@ -20,7 +20,7 @@ setup(
     author_email="njs@pobox.com",
     packages=["zss"],
     url="https://github.com/njsmith/zss",
-    install_requires=["six"],
+    install_requires=["six", "requests"],
     classifiers =
       [ "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -29,6 +29,7 @@ setup(
         "Programming Language :: Python :: 2",
         ],
     cmdclass={"build_ext": build_ext},
+    package_data={"zss": ["test-data/*.zss"]},
     ext_modules=[
         Extension("zss._zss",
                   ["zss/_zss.pyx"],

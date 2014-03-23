@@ -158,11 +158,11 @@ class _HTTPStream(object):
 class _ZSSMapStop(Exception):
     pass
 
-def _decompress_helper(block_level, zdata, stop, decompress_fn):
+def _decompress_helper(offset, block_level, zdata, stop, decompress_fn):
     # stopping has to be left to the next level up
     return decompress_fn(zdata)
 
-def _map_helper(block_level, zdata, stop, decompress_fn,
+def _map_helper(offset, block_level, zdata, stop, decompress_fn,
                 user_fn, user_args, user_kwargs):
     data = decompress_fn(zdata)
     records = unpack_data_records(data)
@@ -180,8 +180,11 @@ def _dump_helper(records, start, stop, terminator):
     records.append(b"")
     return terminator.join(records)
 
+def _fsck_helper(offset, block_level, zdata, stop, decompress_fn):
+    return (offset, block_level, len(zdata), decompress_fn(zdata))
+
 class ZSS(object):
-    def __init__(self, path, workers="auto"):
+    def __init__(self, path, parallelism="auto"):
         self._path = path
         self._transport = FileTransport(path)
 
@@ -201,16 +204,16 @@ class ZSS(object):
         if not isinstance(self.metadata, dict):
             raise ZSSCorrupt("bad metadata")
 
-        if workers == "auto":
+        if parallelism == "auto":
             # XX put an upper bound on this
-            workers = multiprocessing.cpu_count()
-        self._workers = workers
-        if self._workers < 1:
-            raise ZSSError("workers must be >= 1")
-        if workers == 1:
+            parallelism = multiprocessing.cpu_count()
+        self._parallelism = parallelism
+        if self._parallelism < 1:
+            raise ZSSError("parallelism must be >= 1 or \"auto\"")
+        if parallelism == 1:
             self._executor = SerialExecutor()
         else:
-            self._executor = ProcessPoolExecutor(workers)
+            self._executor = ProcessPoolExecutor(parallelism)
 
     def _get_header(self):
         chunk = self._transport.chunk_read(0, HEADER_SIZE_GUESS)
@@ -322,12 +325,12 @@ class ZSS(object):
     # It finds all blocks which may contain records that are >= start, and
     # then for each such block it calls
     #
-    #   fn(block_level, zdata, stop, *args, **kwargs)
+    #   fn(offset, block_level, zdata, stop, *args, **kwargs)
     #
     # Key points:
     # - If skip_index is true, then it skips over index blocks (i.e.,
     #   block_level will always be 0).
-    # - These calls are performed in parallel on however many workers were
+    # - These calls are performed in parallel on however many parallelism were
     #   configured when this ZSS object was created; therefore, fn, args, and
     #   kwargs must all be pickleable.
     # - The iteration may or may not stop when the 'stop' key is reached. If
@@ -340,15 +343,18 @@ class ZSS(object):
             eof = False
             try:
                 while q or not eof:
-                    while not eof and len(q) < self._workers:
+                    while not eof and len(q) < self._parallelism:
+                        offset = stream.offset()
                         block_level, zdata = self._get_next_raw_block(stream)
                         if block_level is None:
                             eof = True
                             continue
                         if skip_index and block_level > 0:
                             continue
-                        q.append(self._executor.submit(fn, block_level, zdata,
-                                                       stop, *args, **kwargs))
+                        f = self._executor.submit(fn,
+                                                  offset, block_level, zdata,
+                                                  stop, *args, **kwargs)
+                        q.append(f)
                     if q:
                         yield q.popleft().result()
             except _ZSSMapStop:
@@ -358,6 +364,9 @@ class ZSS(object):
                     q.pop().cancel()
 
     def sloppy_block_search(self, start=None, stop=None, prefix=None):
+        # This does decompression in the worker, and unpacking in the main
+        # process (because no point in unpacking, then pickling, then
+        # unpickling)
         start, stop = self._norm_search_args(start, stop, prefix)
         mrb = self._map_raw_block
         with closing(mrb(start, stop, True,
@@ -370,6 +379,10 @@ class ZSS(object):
 
     def sloppy_block_map(self, fn, start=None, stop=None, prefix=None,
                          args=(), kwargs={}):
+        # NB in the docs: anything you return from this fn has to be pickled
+        # and then unpickled. So if you're going to be looking at records in
+        # detail in the main process, then it's probably better to use the
+        # regular search function.
         start, stop = self._norm_search_args(start, stop, prefix)
         mrb = self._map_raw_block
         with closing(mrb(start, stop, True, _map_helper,
@@ -418,17 +431,16 @@ class ZSS(object):
                                  "first_record", "block_length"])
         unref_blocks_by_offset = {}
 
-        with closing(self._transport.stream_read(start)) as stream:
-            while True:
-                offset = stream.tell()
-                block_level, contents = self._get_next_block(stream)
-                block_length = stream.tell() - offset
-                if block_level is None:
-                    break
+        mrb = self._map_helper
+        with closing(mrb(None, None, False,
+                         _fsck_helper, self._decompress)) as it:
+            for offset, block_level, zdata_length, data in it:
+                block_length = block_prefix_length + zdata_length
                 if block_level == 0:
-                    records = contents
+                    records = unpack_data_records(data)
                 else:
-                    records, offsets, block_lengths = contents
+                    (records, offsets, block_lengths
+                     ) = unpack_index_records(data)
                 if not sorted(records) == records:
                     fail(offset, "unsorted records within block")
                 if block_level in last_record_by_level:
