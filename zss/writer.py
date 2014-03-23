@@ -13,6 +13,8 @@ import getpass
 import socket
 from datetime import datetime
 
+import six
+
 from zss.common import (ZSSError,
                         MAGIC,
                         INCOMPLETE_MAGIC,
@@ -91,6 +93,10 @@ class ZSSWriter(object):
         self._compress_kwargs = compress_kwargs
         if uuid is None:
             uuid = uuid4().bytes
+        if not isinstance(uuid, six.binary_type):
+            raise TypeError("uuid= must be str (on py2) or bytes (on py3)")
+        if len(uuid) != 16:
+            raise ValueError("uuid (if given) must be exactly 16 bytes")
         self.uuid = uuid
         self._header = {
             "root_index_offset": 2 ** 63 - 1,

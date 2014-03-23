@@ -18,7 +18,7 @@ PORT = 43124
 
 def find_nginx():
     for loc in [os.environ.get("NGINX_PATH"), "/usr/sbin/nginx"]:
-        if loc is not not and os.path.exists(loc):
+        if loc is not None and os.path.exists(loc):
             return loc
     return None
 
@@ -26,7 +26,7 @@ def find_nginx():
 def tempname(suffix=""):
     try:
         fd, path = mkstemp(suffix=suffix)
-        os.fclose(fd)
+        os.close(fd)
         yield path
     finally:
         os.unlink(path)
@@ -72,12 +72,11 @@ def web_server(root, port, error_exc=SkipTest):
             process.wait()
 
 def test_web_server():
-    expected = open(test_data_path("letters.zss")), "rb").read()
-    with web_server(test_data_path(), PORT) as url:
-        response = requests.get(url + "/letters.zss")
-        assert response.content == expected
+    with web_server(test_data_path("http-test"), PORT) as url:
+        response = requests.get(url + "subdir/foo")
+        assert response.content == b"foo"
     # to check it shut down properly, start another one immediately on the
     # same port, with a different root
-    with web_server(os.path.dirname(test_data_path()), PORT) as url:
-        assert requests.get(url + "letters.zss").status_code == 404
-        assert requests.get(url + "test_http.py").status_code == 200
+    with web_server(test_data_path("http-test/subdir"), PORT) as url:
+        assert requests.get(url + "subdir/foo").status_code == 404
+        assert requests.get(url + "foo").status_code == 200

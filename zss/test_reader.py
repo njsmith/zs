@@ -6,6 +6,7 @@ import os
 import os.path
 
 from six import int2byte, byte2int, BytesIO
+from nose.tools import assert_raises
 
 from .test import test_data_path
 from zss import ZSS
@@ -25,12 +26,14 @@ for i in xrange(1, 26, 2):
 def test_zss():
     for codec in zss.common.codecs:
         p = test_data_path("letters-%s.zss" % (codec,))
-        check_letters_zss(ZSS(p, workers=1), codec)
-        check_letters_zss(ZSS(p, workers=2), codec)
-        check_letters_zss(ZSS(p, workers="auto"), codec)
+        for parallelism in [1, 2, "auto"]:
+            with ZSS(p, parallelism=parallelism) as z:
+                check_letters_zss(z, codec)
     # XX FIXME: web as well (in another test, b/c might skip that one)
 
-def _check_map_helper(records, start, stop):
+def _check_map_helper(records, arg1, arg2):
+    assert arg1 == 1
+    assert arg2 == 2
     return records
 
 def _check_raise_helper(records, exc=None):
@@ -42,10 +45,10 @@ def check_letters_zss(z, codec):
     assert z.uuid == (b"\x00\x01\x02\x03\x04\x05\x06\x07"
                       b"\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f")
     assert z.metadata == {
-        "test-data": "letters",
-        "build-user": "test-user",
-        "build-host": "test-host",
-        "built-time": "2000-01-01T00:00:00.000000Z",
+        u"test-data": u"letters",
+        u"build-user": u"test-user",
+        u"build-host": u"test-host",
+        u"build-time": u"2000-01-01T00:00:00.000000Z",
         }
 
     assert list(z) == letters_records
@@ -83,25 +86,29 @@ def check_letters_zss(z, codec):
             sloppy_blocks = list(z.sloppy_block_search(start=start,
                                                        stop=stop,
                                                        prefix=prefix))
+            # bit of a kluge, but the .search() tests up above do exhaustive
+            # testing of norm_search_args, so at least it shouldn't invalidate
+            # the testing:
+            norm_start, norm_stop = z._norm_search_args(start, stop, prefix)
             contains_start_slop = 0
             sloppy_records = set()
             for records in sloppy_blocks:
-                if records[0] < expected[0]:
+                if records[0] < norm_start:
                     contains_start_slop += 1
-                assert not records[0] >= expected[-1]
+                assert norm_stop is None or records[0] < norm_stop
                 sloppy_records.update(records)
             assert contains_start_slop <= 1
-            assert valid_records.issuperset(expected)
+            assert sloppy_records.issuperset(expected)
 
-            sloppy_map_blocks = z.sloppy_block_map(
+            sloppy_map_blocks = list(z.sloppy_block_map(
                 _check_map_helper,
-                # try both args and kwargs arguments
-                args=(start_byte,) kwargs={"stop": stop_byte},
-                start=start, stop=stop, prefix=prefix)
+                # test args and kwargs argument passing
+                args=(1,), kwargs={"arg2": 2},
+                start=start, stop=stop, prefix=prefix))
             assert sloppy_map_blocks == sloppy_blocks
 
             for term in [b"\n", b"\x00"]:
-                expected_dump = term.join(expected) + term
+                expected_dump = term.join(expected + [""])
                 out = BytesIO()
                 z.dump(out, start=start, stop=stop, prefix=prefix,
                        terminator=term)
@@ -109,8 +116,8 @@ def check_letters_zss(z, codec):
 
     assert list(z.search(stop=b"bb", prefix=b"b")) == [b"b"]
 
-    assert_raises(ValueError, list, z.sloppy_block_map,
-                  _check_raise_helper, args=(ValueError,))
+    assert_raises(ValueError, list,
+                  z.sloppy_block_map(_check_raise_helper, args=(ValueError,)))
     assert_raises(ValueError, z.sloppy_block_exec,
                   _check_raise_helper, args=(ValueError,))
 
@@ -123,3 +130,4 @@ def check_letters_zss(z, codec):
 # - make http work
 # - check coverage
 # - docs
+# - add some close/context manager functionality tests

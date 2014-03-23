@@ -93,6 +93,9 @@ class FileTransport(object):
         new_file.seek(offset)
         return new_file
 
+    def close(self):
+        self._file.close()
+
 class HTTPTransport(object):
     remote = True
 
@@ -138,6 +141,9 @@ class HTTPTransport(object):
             raise ZSSError("HTTP server did not respect Range: request")
         return _HTTPStream(offset, response)
 
+    def close(self):
+        pass
+
 class _HTTPStream(object):
     def __init__(self, offset, response):
         self._response = response
@@ -175,7 +181,7 @@ def _dump_helper(records, start, stop, terminator):
         raise _ZSSMapStop()
     if records[0] < start:
         records = records[bisect_left(records, start):]
-    if stop is not None and records[-1] >= stop:
+    if stop is not None and records and records[-1] >= stop:
         records = records[:bisect_left(records, stop)]
     records.append(b"")
     return terminator.join(records)
@@ -214,6 +220,12 @@ class ZSS(object):
             self._executor = SerialExecutor()
         else:
             self._executor = ProcessPoolExecutor(parallelism)
+
+        self._closed = False
+
+    def _check_closed(self):
+        if self._closed:
+            raise ZSSError("attemped operation on closed ZSS file")
 
     def _get_header(self):
         chunk = self._transport.chunk_read(0, HEADER_SIZE_GUESS)
@@ -344,7 +356,7 @@ class ZSS(object):
             try:
                 while q or not eof:
                     while not eof and len(q) < self._parallelism:
-                        offset = stream.offset()
+                        offset = stream.tell()
                         block_level, zdata = self._get_next_raw_block(stream)
                         if block_level is None:
                             eof = True
@@ -367,6 +379,7 @@ class ZSS(object):
         # This does decompression in the worker, and unpacking in the main
         # process (because no point in unpacking, then pickling, then
         # unpickling)
+        self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         mrb = self._map_raw_block
         with closing(mrb(start, stop, True,
@@ -383,6 +396,7 @@ class ZSS(object):
         # and then unpickled. So if you're going to be looking at records in
         # detail in the main process, then it's probably better to use the
         # regular search function.
+        self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         mrb = self._map_raw_block
         with closing(mrb(start, stop, True, _map_helper,
@@ -392,26 +406,30 @@ class ZSS(object):
 
     def sloppy_block_exec(self, fn, start=None, stop=None, prefix=None,
                           args=(), kwargs={}):
+        self._check_closed()
         for result in self.sloppy_block_map(fn, start, stop, prefix,
                                             args, kwargs):
             continue
 
     def search(self, start=None, stop=None, prefix=None):
+        self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         with closing(self.sloppy_block_search(start, stop)) as block_iter:
             for records in block_iter:
                 if records[0] < start:
                     records = records[bisect_left(records, start):]
-                if stop is not None and records[-1] >= stop:
+                if stop is not None and records and records[-1] >= stop:
                     records = records[:bisect_left(records, stop)]
                 for record in records:
                     yield record
 
     def __iter__(self):
+        self._check_closed()
         return self.search()
 
     def dump(self, out_file, start=None, stop=None, prefix=None,
              terminator=b"\n"):
+        self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         sbm = self.sloppy_block_map
         with closing(sbm(_dump_helper,
@@ -420,6 +438,7 @@ class ZSS(object):
             out_file.writelines(it)
 
     def fsck(self):
+        self._check_closed()
         def fail(offset, msg):
             raise ZSSCorrupt("%s at %s: %s" % (self._path, offset, msg))
 
@@ -431,7 +450,7 @@ class ZSS(object):
                                  "first_record", "block_length"])
         unref_blocks_by_offset = {}
 
-        mrb = self._map_helper
+        mrb = self._map_raw_block
         with closing(mrb(None, None, False,
                          _fsck_helper, self._decompress)) as it:
             for offset, block_level, zdata_length, data in it:
@@ -487,3 +506,14 @@ class ZSS(object):
             fail(offset, "unreferenced block")
 
         return "PASS"
+
+    def close(self):
+        self._transport.close()
+        self._executor.shutdown()
+        self._closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self.close()

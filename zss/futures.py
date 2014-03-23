@@ -45,6 +45,9 @@ class SerialExecutor(object):
     def submit(self, fn, *args, **kwargs):
         return _SerialFuture(fn(*args, **kwargs))
 
+    def shutdown(self):
+        pass
+
 if not have_process_pool_executor:
     # then fake it!
 
@@ -68,3 +71,7 @@ if not have_process_pool_executor:
         def submit(self, fn, *args, **kwargs):
             async_result = self._pool.apply_async(fn, args, kwargs)
             return _MultiprocessingFuture(async_result)
+
+        def shutdown(self):
+            self._pool.terminate()
+            self._pool.join()
