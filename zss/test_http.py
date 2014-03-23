@@ -43,7 +43,7 @@ def web_server(root, port, error_exc=SkipTest):
     if nginx is None:
         raise error_exc
     with tempname(".conf") as conf_path, tempname(".pid") as pid_path:
-        with closing(open(conf, "wb")) as conf_path:
+        with open(conf, "wb") as conf_path:
             conf_path.write(
                 "daemon off;\n"
                 "worker_processes 1;\n"
