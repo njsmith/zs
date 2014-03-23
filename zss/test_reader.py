@@ -54,7 +54,11 @@ def check_letters_zss(z, codec):
     assert list(z) == letters_records
     assert list(z.search()) == letters_records
 
-    for char in "abcdefghijklmnopqrstuvwxyz":
+    if "ZSS_QUICK_TEST" in os.environ:
+        chars = "afmz"
+    else:
+        chars = "abcdefghijklmnopqrstuvwxyz"
+    for char in chars:
         byte = char.encode("ascii")
         for (start, stop, prefix) in [
                 (None, None, None),
