@@ -143,10 +143,6 @@ def test_http_notices_lack_of_range_support():
 # - add real fsck tests
 # - add a test to writer that just writes, checks metadata, checks contents,
 #   and calls fsck()
-# - make http work
-#   - add an LRU around chunk_read
 # - check coverage
 # - docs
 # - add some close/context manager functionality tests
-
-# - test http against a server that doesn't do Range

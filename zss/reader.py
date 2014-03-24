@@ -29,6 +29,7 @@ from .common import (ZSSError,
                      read_n,
                      read_format)
 from ._zss import unpack_data_records, unpack_index_records
+from .lru import LRU
 
 # How much data to read from the header on our first request on slow
 # transports. If the header is shorter than this, then we waste a bit of
@@ -102,7 +103,6 @@ class HTTPTransport(object):
         if offset != desired_offset:
             raise ZSSError("HTTP server did not respect Range: request")
 
-    # XX put an LRU cache on this
     def chunk_read(self, offset, length):
         # -1 because Range: is inclusive
         headers = {"Range": "bytes=%s-%s" % (offset, offset + length - 1)}
@@ -177,7 +177,8 @@ def _fsck_helper(offset, block_level, zdata, stop, decompress_fn):
     return (offset, block_level, len(zdata), decompress_fn(zdata))
 
 class ZSS(object):
-    def __init__(self, path=None, url=None, parallelism="auto"):
+    def __init__(self, path=None, url=None,
+                 parallelism="auto", index_block_cache=32):
         if path is not None and url is None:
             self._transport = FileTransport(path)
         elif path is None and url is not None:
@@ -211,6 +212,9 @@ class ZSS(object):
             self._executor = SerialExecutor()
         else:
             self._executor = ProcessPoolExecutor(parallelism)
+
+        self._get_index_block = LRU(self._get_index_block_impl,
+                                    index_block_cache)
 
         self._closed = False
 
@@ -256,11 +260,10 @@ class ZSS(object):
         zdata = stream.read(zdata_length)
         return (block_level, zdata)
 
-    def _get_index_block(self, offset, block_length):
+    def _get_index_block_impl(self, offset, block_length):
         chunk = self._transport.chunk_read(offset, block_length)
-        block_level = ord(chunk[0])
+        block_level, zdata = self._get_next_raw_block(BytesIO(chunk))
         assert block_level > 0
-        zdata = chunk[struct.calcsize(block_prefix_format):]
         data = self._decompress(zdata)
         return (block_level, unpack_index_records(data))
 
