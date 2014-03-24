@@ -34,6 +34,5 @@ with open("root-checksum.zss", "r+b") as f:
 
 
 
-# EOF in the middle of a block encountered while streaming
 # unknown compression format
 # metadata is invalid json, or not a dict

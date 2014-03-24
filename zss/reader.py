@@ -69,6 +69,20 @@ def _get_raw_block_unchecked(stream):
         raise ZSSCorrupt("unexpected EOF")
     return block_contents, checksum
 
+def test__get_raw_block_unchecked():
+    f = BytesIO(b"\x05" + b"\x01" * 5 + b"\x02" * 4)
+    assert _get_raw_block_unchecked(f) == (b"\x01" * 5, b"\x02" * 4)
+    from nose.tools import assert_raises
+    # It's almost impossible to create a ZSS file that actually shows this
+    # error without hitting another error first. (It has to be
+    # in a block that is *not* read during the initial index lookup, but *is*
+    # at the end of the file -- but usually the root index block is at the end
+    # of the file.) So, we just test it directly:
+    f_partial1 = BytesIO(b"\x05" + b"\x01" * 4)
+    assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial1)
+    f_partial2 = BytesIO(b"\x05" + b"\x01" * 5 + "\x02" * 3)
+    assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial2)
+
 def _check_block(offset, raw_block, checksum):
     if encoded_crc32c(raw_block) != checksum:
         raise ZSSCorrupt("checksum mismatch at %s" % (offset,))
