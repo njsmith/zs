@@ -1,0 +1,10 @@
+[run]
+branch=True
+source=zss
+omit=*/tests/*
+
+[report]
+exclude_lines =
+  pragma: no cover
+  ^def test_
+precision = 1

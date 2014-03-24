@@ -30,7 +30,7 @@ setup(
         "Programming Language :: Python :: 2",
         ],
     cmdclass={"build_ext": build_ext},
-    package_data={"zss": ["test-data/*.zss"]},
+    package_data={"zss": ["tests/data/*"]},
     ext_modules=[
         Extension("zss._zss",
                   ["zss/_zss.pyx"],

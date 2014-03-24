@@ -22,12 +22,12 @@ import six
 
 from nose.plugins.skip import SkipTest
 
-from .test_util import test_data_path, tempname
+from .util import test_data_path, tempname
 
 # a random number
 PORT = 43124
 
-def find_nginx():
+def find_nginx():  # pragma: no cover
     for loc in [os.environ.get("NGINX_PATH"), "/usr/sbin/nginx"]:
         if loc is not None and os.path.exists(loc):
             return loc
@@ -40,7 +40,7 @@ def _copy_to_stdout(handle):
             break
         sys.stdout.write(byte)
 
-def wait_for_tcp(port):
+def wait_for_tcp(port):  # pragma: no cover
     TIMEOUT = 5.0
     POLL = 0.01
     now = time.time()
@@ -70,8 +70,10 @@ def spawn_server(argv, port, **kwargs):
     return (process, stdout_thread)
 
 def shutdown_server(process_thread, name):
+    if process_thread is None:
+        return
     process, stdout_thread = process_thread
-    if process.poll() is not None:
+    if process.poll() is not None:  # pragma: no cover
         raise IOError("%s exited with error: %s" % (name, process.returncode))
     process.terminate()
     process.wait()
@@ -80,7 +82,7 @@ def shutdown_server(process_thread, name):
 @contextmanager
 def nginx_server(root, port=PORT, error_exc=SkipTest):
     nginx = find_nginx()
-    if nginx is None:
+    if nginx is None:  # pragma: no cover
         raise error_exc
     with tempname(".conf") as conf_path, tempname(".pid") as pid_path:
         with open(conf_path, "wb") as conf:
@@ -100,6 +102,7 @@ def nginx_server(root, port=PORT, error_exc=SkipTest):
                 "  }\n"
                 "}\n"
                 % (pid_path, port, root))
+        server = None
         try:
             server = spawn_server([nginx, "-c", conf_path], port)
             yield "http://127.0.0.1:%s/" % (port,)
@@ -108,10 +111,11 @@ def nginx_server(root, port=PORT, error_exc=SkipTest):
 
 @contextmanager
 def simplehttpserver(root, port=PORT, error_exc=SkipTest):
-    if six.PY2:
+    if six.PY2:  # pragma: no cover
         mod = "SimpleHTTPServer"
     else:
         mod = "http.server"
+    server = None
     try:
         server = spawn_server([sys.executable, "-m", mod, str(port)], port,
                                cwd=root)

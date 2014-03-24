@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from tempfile import mkstemp
 
 def test_data_path(path=""):
-    test_data_dir = os.path.join(os.path.dirname(__file__), "test-data")
+    test_data_dir = os.path.join(os.path.dirname(__file__), "data")
     return os.path.join(test_data_dir, path)
 
 test_data_path.__test__ = False

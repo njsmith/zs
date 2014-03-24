@@ -1,0 +1,6 @@
+* Next
+** Add real fsck tests
+** add a test to writer that just writes, checks metadata, checks contents, and calls fsck()
+** set up travis
+** docs
+** add some tests for ZSS close() and context manager methods

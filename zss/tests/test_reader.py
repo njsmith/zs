@@ -8,9 +8,9 @@ import os.path
 from six import int2byte, byte2int, BytesIO
 from nose.tools import assert_raises
 
-from ..test_util import test_data_path
-from ..http_test_harness import web_server, simplehttpserver
-from zss import ZSS, ZSSError
+from .util import test_data_path
+from .http_harness import web_server, simplehttpserver
+from zss import ZSS, ZSSError, ZSSCorrupt
 import zss.common
 
 # letters.zss contains records:
@@ -25,11 +25,10 @@ def _check_map_helper(records, arg1, arg2):
     assert arg2 == 2
     return records
 
-def _check_raise_helper(records, exc=None):
-    if exc is not None:
-        raise exc
+def _check_raise_helper(records, exc):
+    raise exc
 
-def check_letters_zss(z, codec, reduced=False):
+def check_letters_zss(z, codec):
     assert z.compression == codec
     assert z.uuid == (b"\x00\x01\x02\x03\x04\x05\x06\x07"
                       b"\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f")
@@ -43,7 +42,7 @@ def check_letters_zss(z, codec, reduced=False):
     assert list(z) == letters_records
     assert list(z.search()) == letters_records
 
-    if reduced or "ZSS_QUICK_TEST" in os.environ:
+    if "ZSS_QUICK_TEST" in os.environ:
         chars = "m"
     else:
         chars = "abcdefghijklmnopqrstuvwxyz"
@@ -119,7 +118,7 @@ def check_letters_zss(z, codec, reduced=False):
 def test_zss():
     for codec in zss.common.codecs:
         p = test_data_path("letters-%s.zss" % (codec,))
-        for parallelism in [1, 2, "auto"]:
+        for parallelism in [0, 2, "auto"]:
             with ZSS(path=p, parallelism=parallelism) as z:
                 check_letters_zss(z, codec)
 
@@ -129,9 +128,9 @@ def test_http_zss():
     with web_server(test_data_path()) as root_url:
         codec = "bz2"
         url = "%s/letters-%s.zss" % (root_url, codec)
-        for parallelism in [1, 2]:
+        for parallelism in [0, 2]:
             with ZSS(url=url, parallelism=parallelism) as z:
-                check_letters_zss(z, codec, reduced=True)
+                check_letters_zss(z, codec)
 
 def test_http_notices_lack_of_range_support():
     with simplehttpserver(test_data_path()) as root_url:
@@ -139,11 +138,72 @@ def test_http_notices_lack_of_range_support():
         url = "%s/letters-%s.zss" % (root_url, codec)
         assert_raises(ZSSError, lambda: list(ZSS(url=url)))
 
-# next:
-# - crc protection for block level
-# - add real fsck tests
-# - add a test to writer that just writes, checks metadata, checks contents,
-#   and calls fsck()
-# - check coverage
-# - docs
-# - add some close/context manager functionality tests
+def test_zss_args():
+    p = test_data_path("letters-none.zss")
+    # can't pass both path and url
+    assert_raises(ValueError, ZSS, path=p, url="x")
+    # parallelism must be >= 0
+    assert_raises(ValueError, ZSS, path=p, parallelism=-1)
+
+def test_zss_close():
+    z = ZSS(test_data_path("letters-none.zss"))
+    z.close()
+    for call in [[list, z.search()],
+                 [list, z.sloppy_block_search()],
+                 [list,
+                  z.sloppy_block_map(_check_raise_helper, AssertionError)],
+                 [list, z],
+                 [z.dump, BytesIO()],
+                 [z.fsck],
+                 ]:
+        print(repr(call))
+        assert_raises(ZSSError, *call)
+
+def test_context_manager_closes():
+    with ZSS(test_data_path("letters-none.zss")) as z:
+        assert list(z.search()) == letters_records
+    assert_raises(ZSSError, list, z.search())
+
+def test_sloppy_block_exec():
+    # This function tricky to test in a multiprocessing world, because we need
+    # some way to communicate back from the subprocesses that the execution
+    # actually happened... instead we just test it in serial
+    # mode. (Fortunately it is a super-trivial function.)
+    z = ZSS(test_data_path("letters-none.zss"), parallelism=0)
+    # b/c we're in serial mode, the fn doesn't need to be pickleable
+    class CountBlocks(object):
+        def __init__(self):
+            self.count = 0
+        def __call__(self, records):
+            self.count += 1
+    count_blocks = CountBlocks()
+    z.sloppy_block_exec(count_blocks)
+    assert count_blocks.count > 1
+    assert count_blocks.count == len(list(z.sloppy_block_search()))
+
+def test_big_headers():
+    from zss.reader import _lower_header_size_guess
+    with _lower_header_size_guess():
+        z = ZSS(test_data_path("letters-none.zss"))
+        assert z.compression == "none"
+        assert z.uuid == (b"\x00\x01\x02\x03\x04\x05\x06\x07"
+                          b"\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f")
+        assert z.metadata == {
+            u"test-data": u"letters",
+            u"build-user": u"test-user",
+            u"build-host": u"test-host",
+            u"build-time": u"2000-01-01T00:00:00.000000Z",
+        }
+        assert list(z) == letters_records
+
+def test_broken_files():
+    def open_and_read(p):
+        list(ZSS(p))
+    def open_and_fsck(p):
+        ZSS(p).fsck()
+    # Files that should fail even on casual use (no fsck)
+    for basename in ["partial-root", "bad-magic", "incomplete-magic",
+                     "header-checksum", "root-checksum",
+                     ]:
+        p = test_data_path("broken-files/%s.zss" % (basename,))
+        assert_raises(ZSSCorrupt, open_and_read, p)

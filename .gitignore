@@ -2,6 +2,9 @@
 
 # Cython output
 zss/_zss.c
+# Coverage output
+htmlcov
+.coverage.*
 # Emacs autosave
 *~
 

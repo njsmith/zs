@@ -6,7 +6,7 @@ import sys
 import struct
 import json
 from bisect import bisect_left
-from contextlib import closing
+from contextlib import closing, contextmanager
 from collections import namedtuple, deque
 import multiprocessing
 
@@ -36,6 +36,15 @@ from .transport import FileTransport, HTTPTransport
 # be larger than the magic + header length field, which is currently 16.)
 HEADER_SIZE_GUESS = 8192
 
+# for testing
+@contextmanager
+def _lower_header_size_guess():
+    global HEADER_SIZE_GUESS
+    was = HEADER_SIZE_GUESS
+    HEADER_SIZE_GUESS = 16
+    yield
+    HEADER_SIZE_GUESS = was
+
 def _decode_header_data(encoded):
     fields = {}
     f = BytesIO(encoded)
@@ -60,7 +69,7 @@ def _get_raw_block_unchecked(stream):
         raise ZSSCorrupt("unexpected EOF")
     return block_contents, checksum
 
-def _check_block(raw_block, checksum):
+def _check_block(offset, raw_block, checksum):
     if encoded_crc32c(raw_block) != checksum:
         raise ZSSCorrupt("checksum mismatch at %s" % (offset,))
     block_level = byte2int(raw_block[0])
@@ -75,7 +84,7 @@ class _ZSSMapSkip(object):
 
 def _map_raw_helper(offset, block_length, raw_block, checksum,
                     skip_index, stop, fn, args, kwargs):
-    block_level, zdata = _check_block(raw_block, checksum)
+    block_level, zdata = _check_block(offset, raw_block, checksum)
     if skip_index and block_level > 0:
         return _ZSSMapSkip
     return fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
@@ -94,8 +103,6 @@ def _map_helper(offset, block_length, block_level, zdata, stop, decompress_fn,
     return user_fn(records, *user_args, **user_kwargs)
 
 def _dump_helper(records, start, stop, terminator):
-    if stop is not None and records[0] >= stop:
-        raise _ZSSMapStop()
     if records[0] < start:
         records = records[bisect_left(records, start):]
     if stop is not None and records and records[-1] >= stop:
@@ -138,7 +145,7 @@ class ZSS(object):
             parallelism = multiprocessing.cpu_count()
         self._parallelism = parallelism
         if self._parallelism < 0:
-            raise ZSSError("parallelism must be >= 0 or \"auto\"")
+            raise ValueError("parallelism must be >= 0 or \"auto\"")
         if parallelism == 0:
             self._executor = SerialExecutor()
         else:
@@ -186,7 +193,7 @@ class ZSS(object):
             raise ZSSCorrupt("partial read on index block @ %s, length %s"
                              % (offset, block_length))
         raw_block, checksum = _get_raw_block_unchecked(BytesIO(chunk))
-        block_level, zdata = _check_block(raw_block, checksum)
+        block_level, zdata = _check_block(offset, raw_block, checksum)
         assert block_level > 0
         data = self._decompress(zdata)
         return (block_level, unpack_index_records(data))
@@ -220,7 +227,7 @@ class ZSS(object):
             # such a block.
             if round_down and idx != 0:
                 idx -= 1
-            if idx > len(offsets):
+            if idx >= len(offsets):
                 # there are no blocks whose first entry is >= needle. (This
                 # can only happen if round_down=False.)
                 return None
@@ -235,17 +242,20 @@ class ZSS(object):
         # we intersect start/stop/prefix together
         if start is None:
             start = b""
+        if prefix is None:
+            prefix = b""
         # unfortunately, there is no concrete value we can put for "stop" that
         # is equivalent to leaving it unspecified, so we have to do some
-        # if-then-wrangling below.
-        if prefix is not None:
-            start = max(prefix, start)
-            if prefix:
-                prefix_stop = prefix[:-1] + int2byte(byte2int(prefix[-1]) + 1)
-            if stop is None:
-                stop = prefix_stop
-            else:
-                stop = min(stop, prefix_stop)
+        # if-then-wrangling everywhere 'stop' is used.
+        start = max(prefix, start)
+        if prefix:
+            prefix_stop = prefix[:-1] + int2byte(byte2int(prefix[-1]) + 1)
+        else:
+            prefix_stop = None
+        if stop is None:
+            stop = prefix_stop
+        elif prefix_stop is not None:
+            stop = min(stop, prefix_stop)
         # now start is always a string, and stop is either a string or None,
         # and we can ignore 'prefix', because its effect has been incorporated
         # into start/stop.
@@ -348,9 +358,10 @@ class ZSS(object):
     def sloppy_block_exec(self, fn, start=None, stop=None, prefix=None,
                           args=(), kwargs={}):
         self._check_closed()
-        for result in self.sloppy_block_map(fn, start, stop, prefix,
-                                            args, kwargs):
-            continue
+        with closing(self.sloppy_block_map(fn, start, stop, prefix,
+                                           args, kwargs)) as it:
+            for _ in it:
+                pass
 
     def search(self, start=None, stop=None, prefix=None):
         self._check_closed()
@@ -418,7 +429,9 @@ class ZSS(object):
                     for (ref_key, ref_offset, ref_block_length) in zip(
                             records, offsets, block_lengths):
                         if ref_offset not in unref_blocks_by_offset:
-                            fail(offset, "dangling ref to %s" % (ref_offset,))
+                            fail(offset,
+                                 "dangling or multiple ref to %s"
+                                 % (ref_offset,))
                         ref = unref_blocks_by_offset.pop(ref_offset)
                         if ref.block_level != block_level - 1:
                             fail(offset, "level %s ref to level %s" % (

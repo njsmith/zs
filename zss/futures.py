@@ -27,7 +27,7 @@
 
 try:
     from concurrent.futures import ProcessPoolExecutor
-    have_process_pool_executor = True
+    have_process_pool_executor = True  # pragma: no cover
 except ImportError:
     have_process_pool_executor = False
 
@@ -46,7 +46,7 @@ class SerialExecutor(object):
         return _SerialFuture(fn(*args, **kwargs))
 
     def shutdown(self):
-        pass
+        pass  # pragma: no cover
 
 if not have_process_pool_executor:
     # then fake it!
