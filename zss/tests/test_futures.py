@@ -2,7 +2,7 @@
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
-from .futures import ProcessPoolExecutor, SerialExecutor
+from ..futures import ProcessPoolExecutor, SerialExecutor
 
 def square(x):
     return x ** 2

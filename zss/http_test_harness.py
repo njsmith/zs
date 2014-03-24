@@ -4,6 +4,7 @@
 
 from contextlib import contextmanager
 import subprocess
+from tempfile import mkstemp
 import os
 import os.path
 import time

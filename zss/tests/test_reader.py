@@ -8,7 +8,7 @@ import os.path
 from six import int2byte, byte2int, BytesIO
 from nose.tools import assert_raises
 
-from .test import test_data_path
+from ..test import test_data_path
 from zss import ZSS
 import zss.common
 

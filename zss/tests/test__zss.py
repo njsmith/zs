@@ -5,7 +5,7 @@
 from __future__ import absolute_import
 
 import zss
-from ._zss import *
+from .._zss import *
 from nose.tools import assert_raises
 
 def test_crc32c():

@@ -2,11 +2,12 @@
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
-from cStringIO import StringIO
-from nose.tools import assert_raises
 import pickle
 
-from .common import *
+import six
+from nose.tools import assert_raises
+
+from ..common import *
 
 def test_encoded_crc32c():
     assert encoded_crc32c(b"foo") == b"\x1d\xae\xc4\xcf"
@@ -45,12 +46,12 @@ def test_codecs():
             assert pickle.loads(pickle.dumps(decomp)) is decomp
 
 def test_read_n():
-    f = StringIO(b"abcde")
+    f = six.BytesIO(b"abcde")
     assert read_n(f, 3) == b"abc"
     assert_raises(ZSSCorrupt, read_n, f, 3)
 
 def test_read_format():
-    f = StringIO(b"\x01\x02\x03")
+    f = six.BytesIO(b"\x01\x02\x03")
     a, b = read_format(f, "<BH")
     assert a == 1
     assert b == 0x0302
