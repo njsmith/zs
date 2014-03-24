@@ -55,7 +55,7 @@ def check_letters_zss(z, codec):
     assert list(z.search()) == letters_records
 
     if "ZSS_QUICK_TEST" in os.environ:
-        chars = "afmz"
+        chars = "m"
     else:
         chars = "abcdefghijklmnopqrstuvwxyz"
     for char in chars:
