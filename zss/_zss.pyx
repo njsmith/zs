@@ -45,7 +45,7 @@ def crc32c(data):
 
 ################################################################
 
-cdef int write_uleb128(uint64_t value, uint8_t * buffer):
+cdef int buf_write_uleb128(uint64_t value, uint8_t * buffer):
     cdef int written = 0
     cdef uint8_t byte
     while True:
@@ -59,7 +59,7 @@ cdef int write_uleb128(uint64_t value, uint8_t * buffer):
             break
     return written
 
-def cython_test_write_uleb128():
+def cython_test_buf_write_uleb128():
    cdef uint8_t buf[_MAX_ULEB128_LENGTH]
    for (value, expected) in [(0, b"\x00"),
                              (0x10, b"\x10"),
@@ -69,13 +69,13 @@ def cython_test_write_uleb128():
                              (1 << 43, b"\x80\x80\x80\x80\x80\x80\x02"),
                              ]:
       print("--- start %s ---" % (value,))
-      assert write_uleb128(value, buf) == len(expected)
+      assert buf_write_uleb128(value, buf) == len(expected)
       for i in range(len(expected)):
          print(ord(expected[i]), buf[i])
          assert ord(expected[i]) == buf[i]
       print("--- end %s ---" % (value,))
 
-cdef uint64_t read_uleb128(uint8_t * buf, size_t buf_len, size_t * offset) except? 0:
+cdef uint64_t buf_read_uleb128(uint8_t * buf, size_t buf_len, size_t * offset) except? 0:
     cdef uint64_t value = 0
     cdef int shift = 0
     cdef uint8_t byte
@@ -96,7 +96,7 @@ cdef uint64_t read_uleb128(uint8_t * buf, size_t buf_len, size_t * offset) excep
             return value
         shift += 7
 
-def cython_test_read_uleb128():
+def cython_test_buf_read_uleb128():
     cdef uint8_t * buf
     cdef size_t offset
     for (string, integer, length) in [(b"\x00", 0, 1),
@@ -118,36 +118,44 @@ def cython_test_read_uleb128():
                                                     offset,
                                                     hex(integer),
                                                     length)
-                got = read_uleb128(buf, len(buf_handle), &offset)
+                got = buf_read_uleb128(buf, len(buf_handle), &offset)
                 print "got %s (%s)" % (hex(got), offset)
                 assert got == integer
                 assert offset == len(prefix) + length
     buf = b"\x80\x80"
     offset = 0
     try:
-        read_uleb128(buf, 2, &offset)
+        buf_read_uleb128(buf, 2, &offset)
     except zss.ZSSCorrupt:
         pass
     else:
-        assert False, "read_uleb128 overran end of buf"
+        assert False, "buf_read_uleb128 overran end of buf"
     # This is 2**64, which is 1 larger than the largest uint64 value.
     buf = b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x02"
     offset = 0
     try:
-        read_uleb128(buf, len(buf), &offset)
+        buf_read_uleb128(buf, len(buf), &offset)
     except zss.ZSSCorrupt:
         pass
     else:
-        assert False, "read_uleb128 failed to catch integer overflow"
+        assert False, "buf_read_uleb128 failed to catch integer overflow"
     # This is the value 1, encoded into two bytes.
     buf = b"\x81\x00"
     offset = 0
     try:
-        read_uleb128(buf, len(buf), &offset)
+        buf_read_uleb128(buf, len(buf), &offset)
     except zss.ZSSCorrupt:
         pass
     else:
-        assert False, "read_uleb128 failed to catch unnormalized encoding"
+        assert False, "buf_read_uleb128 failed to catch unnormalized encoding"
+
+def read_uleb128(f):
+   cdef bytes data = f.read(MAX_ULEB128_LENGTH)
+   if not data:
+      return (None, "")
+   cdef size_t offset = 0
+   cdef uint64_t value = buf_read_uleb128(data, len(data), &offset)
+   return value, data[offset:]
 
 ################################################################
 
@@ -194,17 +202,17 @@ cdef bytes _pack_records(list records,
             if new_bufsize != bufsize:
                 buf = <uint8_t *>realloc(buf, new_bufsize)
                 bufsize = new_bufsize
-            written += write_uleb128(c_length, buf + written)
+            written += buf_write_uleb128(c_length, buf + written)
             memcpy(buf + written, c_data, c_length)
             written += c_length
             if offsets is not None:
-                written += write_uleb128(offsets[i], buf + written)
+                written += buf_write_uleb128(offsets[i], buf + written)
                 if i > 0:
                     if offsets[i - 1] >= offsets[i]:
                         raise zss.ZSSError("blocks are not sorted: offset %s "
                                            "comes after %s"
                                            % (offsets[i], offsets[i - 1]))
-                written += write_uleb128(block_lengths[i], buf + written)
+                written += buf_write_uleb128(block_lengths[i], buf + written)
             previous_c_data = c_data
             previous_c_length = c_length
         return PyBytes_FromStringAndSize(<char *>buf, written)
@@ -232,7 +240,7 @@ cdef tuple _unpack_records(bint is_index, bytes block):
         offsets = []
         block_lengths = []
     while buf_offset < buf_len:
-        record_length = read_uleb128(buf, buf_len, &buf_offset)
+        record_length = buf_read_uleb128(buf, buf_len, &buf_offset)
         if buf_offset + record_length > buf_len:
             raise zss.ZSSCorrupt("record extends past end of block "
                                  "(%s bytes remaining in block, "
@@ -242,9 +250,9 @@ cdef tuple _unpack_records(bint is_index, bytes block):
                                                  record_length))
         buf_offset += record_length
         if is_index:
-            offset = read_uleb128(buf, buf_len, &buf_offset)
+            offset = buf_read_uleb128(buf, buf_len, &buf_offset)
             offsets.append(offset)
-            block_length = read_uleb128(buf, buf_len, &buf_offset)
+            block_length = buf_read_uleb128(buf, buf_len, &buf_offset)
             block_lengths.append(block_length)
     assert buf_offset == buf_len
     return records, offsets, block_lengths

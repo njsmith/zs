@@ -4,6 +4,8 @@
 
 from __future__ import absolute_import
 
+import six
+
 import zss
 from .._zss import *
 from nose.tools import assert_raises
@@ -23,11 +25,23 @@ def test_crc32c():
         print hex(crc32c(data))
         assert result == crc32c(data)
 
-def test_write_uleb128():
-    cython_test_write_uleb128()
+def test_buf_write_uleb128():
+    cython_test_buf_write_uleb128()
+
+def test_buf_read_uleb128():
+    cython_test_buf_read_uleb128()
 
 def test_read_uleb128():
-    cython_test_read_uleb128()
+    def t(data, expected_value, expected_len):
+        f = six.BytesIO(data)
+        value, extra_bytes = read_uleb128(f)
+        assert value == expected_value
+        assert data[expected_len:] == (extra_bytes + f.read())
+
+    t(b"\x01", 1, 1)
+    t(b"\x01" + b"\x02" * 50, 1, 1)
+    t(b"\x80\x01\x05", 0x80, 2)
+    t(b"", None, 0)
 
 def test_data_records():
     records = [b"", b"\x00" * 16, b"a", b"b"]
