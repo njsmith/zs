@@ -2,6 +2,11 @@
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
+# We can't use HTTPSimpleServer for testing ZSS-over-HTTP, because
+# HTTPSimpleServer doesn't support Range requests. So instead this file sets
+# up a little harness for spawning a little temporary static-only
+# localhost-only nginx server.
+
 from contextlib import contextmanager
 import subprocess
 from tempfile import mkstemp
@@ -13,6 +18,7 @@ import threading
 import sys
 
 import requests
+import six
 
 from nose.plugins.skip import SkipTest
 
@@ -34,8 +40,45 @@ def _copy_to_stdout(handle):
             break
         sys.stdout.write(byte)
 
+def wait_for_tcp(port):
+    TIMEOUT = 5.0
+    POLL = 0.01
+    now = time.time()
+    while time.time() - now < TIMEOUT:
+        try:
+            s = socket.create_connection(("127.0.0.1", port))
+        except socket.error:
+            continue
+        else:
+            s.close()
+            break
+        time.sleep(POLL)
+    else:
+        raise IOError("server not listening after %s seconds" % (TIMEOUT,))
+
+def spawn_server(argv, port, **kwargs):
+    process = subprocess.Popen(argv,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT,
+                               **kwargs)
+    # We capture the server's chatter and redirect it to sys.stdout, where it
+    # is then captured by nose and only displayed if the test fails.
+    stdout_thread = threading.Thread(target=_copy_to_stdout,
+                                     args=(process.stdout,))
+    stdout_thread.start()
+    wait_for_tcp(port)
+    return (process, stdout_thread)
+
+def shutdown_server(process_thread, name):
+    process, stdout_thread = process_thread
+    if process.poll() is not None:
+        raise IOError("%s exited with error: %s" % (name, process.returncode))
+    process.terminate()
+    process.wait()
+    stdout_thread.join()
+
 @contextmanager
-def web_server(root, port, error_exc=SkipTest):
+def nginx_server(root, port=PORT, error_exc=SkipTest):
     nginx = find_nginx()
     if nginx is None:
         raise error_exc
@@ -58,45 +101,33 @@ def web_server(root, port, error_exc=SkipTest):
                 "}\n"
                 % (pid_path, port, root))
         try:
-            process = subprocess.Popen([nginx, "-c", conf_path],
-                                       stderr=subprocess.PIPE)
-            # We capture nginx's chatter and redirect it to sys.stdout, where
-            # it is then captured by nose and only displayed if the test
-            # fails.
-            nginx_stderr_thread = threading.Thread(target=_copy_to_stdout,
-                                                   args=(process.stderr,))
-            nginx_stderr_thread.daemon = True
-            nginx_stderr_thread.start()
-            # need to wait for it to be ready to accept connections!
-            TIMEOUT = 5.0
-            POLL = 0.01
-            for i in xrange(int(TIMEOUT / POLL)):
-                try:
-                    s = socket.create_connection(("127.0.0.1", port))
-                except socket.error:
-                    continue
-                else:
-                    s.close()
-                    break
-                time.sleep(POLL)
-            else:
-                raise AssertionError("nginx not listening after %s seconds"
-                                     % (TIMEOUT,))
+            server = spawn_server([nginx, "-c", conf_path], port)
             yield "http://127.0.0.1:%s/" % (port,)
         finally:
-            process.poll()
-            if process.returncode is not None:
-                raise IOError("nginx exited with error: %s"
-                              % (process.returncode,))
-            process.terminate()
-            process.wait()
+            shutdown_server(server, "nginx")
+
+@contextmanager
+def simplehttpserver(root, port=PORT, error_exc=SkipTest):
+    if six.PY2:
+        mod = "SimpleHTTPServer"
+    else:
+        mod = "http.server"
+    try:
+        server = spawn_server([sys.executable, "-m", mod, str(port)], port,
+                               cwd=root)
+        yield "http://127.0.0.1:%s/" % (port,)
+    finally:
+        shutdown_server(server, mod)
+
+web_server = nginx_server
 
 def test_web_server():
-    with web_server(test_data_path("http-test"), PORT) as url:
-        response = requests.get(url + "subdir/foo")
-        assert response.content == b"foo\n"
-    # to check it shut down properly, start another one immediately on the
-    # same port, with a different root
-    with web_server(test_data_path("http-test/subdir"), PORT) as url:
-        assert requests.get(url + "subdir/foo").status_code == 404
-        assert requests.get(url + "foo").status_code == 200
+    for server in [nginx_server, simplehttpserver]:
+        with server(test_data_path("http-test")) as url:
+            response = requests.get(url + "subdir/foo")
+            assert response.content == b"foo\n"
+        # to check it shut down properly, start another one immediately on the
+        # same port, with a different root
+        with server(test_data_path("http-test/subdir")) as url:
+            assert requests.get(url + "subdir/foo").status_code == 404
+            assert requests.get(url + "foo").status_code == 200

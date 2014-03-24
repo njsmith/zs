@@ -9,27 +9,16 @@ from six import int2byte, byte2int, BytesIO
 from nose.tools import assert_raises
 
 from ..test_util import test_data_path
-from zss import ZSS
+from ..http_test_harness import web_server, simplehttpserver
+from zss import ZSS, ZSSError
 import zss.common
-
-# XX provide some export that test_http can use
-# or, import from test_http and run tests
 
 # letters.zss contains records:
 #   [b, bb, d, dd, f, ff, ..., z, zz]
-
 letters_records = []
 for i in xrange(1, 26, 2):
     letter = int2byte(byte2int(b"a") + i)
     letters_records += [letter, 2 * letter]
-
-def test_zss():
-    for codec in zss.common.codecs:
-        p = test_data_path("letters-%s.zss" % (codec,))
-        for parallelism in [1, 2, "auto"]:
-            with ZSS(p, parallelism=parallelism) as z:
-                check_letters_zss(z, codec)
-    # XX FIXME: web as well (in another test, b/c might skip that one)
 
 def _check_map_helper(records, arg1, arg2):
     assert arg1 == 1
@@ -40,7 +29,7 @@ def _check_raise_helper(records, exc=None):
     if exc is not None:
         raise exc
 
-def check_letters_zss(z, codec):
+def check_letters_zss(z, codec, reduced=False):
     assert z.compression == codec
     assert z.uuid == (b"\x00\x01\x02\x03\x04\x05\x06\x07"
                       b"\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f")
@@ -54,7 +43,7 @@ def check_letters_zss(z, codec):
     assert list(z) == letters_records
     assert list(z.search()) == letters_records
 
-    if "ZSS_QUICK_TEST" in os.environ:
+    if reduced or "ZSS_QUICK_TEST" in os.environ:
         chars = "m"
     else:
         chars = "abcdefghijklmnopqrstuvwxyz"
@@ -127,11 +116,37 @@ def check_letters_zss(z, codec):
 
     z.fsck()
 
+def test_zss():
+    for codec in zss.common.codecs:
+        p = test_data_path("letters-%s.zss" % (codec,))
+        for parallelism in [1, 2, "auto"]:
+            with ZSS(path=p, parallelism=parallelism) as z:
+                check_letters_zss(z, codec)
+
+# This is much slower, and the above test will have already exercised most of
+# the tricky code, so we make this test less exhaustive.
+def test_http_zss():
+    with web_server(test_data_path()) as root_url:
+        codec = "bz2"
+        url = "%s/letters-%s.zss" % (root_url, codec)
+        for parallelism in [1, 2]:
+            with ZSS(url=url, parallelism=parallelism) as z:
+                check_letters_zss(z, codec, reduced=True)
+
+def test_http_notices_lack_of_range_support():
+    with simplehttpserver(test_data_path()) as root_url:
+        codec = "bz2"
+        url = "%s/letters-%s.zss" % (root_url, codec)
+        assert_raises(ZSSError, lambda: list(ZSS(url=url)))
+
 # next:
 # - add real fsck tests
 # - add a test to writer that just writes, checks metadata, checks contents,
 #   and calls fsck()
 # - make http work
+#   - add an LRU around chunk_read
 # - check coverage
 # - docs
 # - add some close/context manager functionality tests
+
+# - test http against a server that doesn't do Range

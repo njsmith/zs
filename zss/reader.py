@@ -2,30 +2,6 @@
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
-# Notes on HTTP reading
-# - for streaming read:
-#   requests.get(url, stream=True, headers={"Range": "..."})
-#   - check the headers on the response to make sure they actually
-#     respected the Range request!
-#   - use r.iter_content to fetch actual data
-# - for non-streaming chunk fetch:
-#   requests.get(url, headers={"Range": "..."})
-#   r.content
-#
-# for header, should just fetch a big block, and then fetch more if that
-#   wasn't enough.
-# for general reading, need API that fetches block given offset + length
-# and also ability to spawn a stream at a given offset and then read through
-#   it
-#
-# and at the decode level, need to be able to read a block out of a fetched
-# chunk, or else read a block out of a stream
-#
-# becomes more useful:
-#   wrap an LRU around the block fetcher (e.g. to cache the root!)
-#   calculate the end offset of a range request up front, and limit the
-#     stream to that
-
 import sys
 import os
 import struct
@@ -36,8 +12,12 @@ import re
 from contextlib import closing
 from collections import namedtuple, deque
 import multiprocessing
+
+import requests
+
 from .futures import SerialExecutor, ProcessPoolExecutor
-from .common import (ZSSCorrupt,
+from .common import (ZSSError,
+                     ZSSCorrupt,
                      MAGIC,
                      INCOMPLETE_MAGIC,
                      encoded_crc32c,
@@ -48,7 +28,7 @@ from .common import (ZSSCorrupt,
                      codecs,
                      read_n,
                      read_format)
-from zss._zss import unpack_data_records, unpack_index_records
+from ._zss import unpack_data_records, unpack_index_records
 
 # How much data to read from the header on our first request on slow
 # transports. If the header is shorter than this, then we waste a bit of
@@ -74,8 +54,9 @@ class FileTransport(object):
     remote = False
 
     def __init__(self, path):
-        self._path = path
         self._file = open(path, "rb")
+        # To include in user-directed error messages etc.
+        self.name = path
 
     # This allows partial reads (i.e., if EOF falls in the middle of the
     # requested chunk, then we return the part before the EOF). Fortunately,
@@ -86,9 +67,9 @@ class FileTransport(object):
         return self._file.read(length)
 
     # Returns a file-like object which will return bytes from the given
-    # position. 'end_offset', if given, is a hint -- the returned file-like
+    # position. 'stop_offset', if given, is a hint -- the returned file-like
     # object may or may not EOF after reaching this point.
-    def stream_read(self, offset, end_offset=None):
+    def stream_read(self, offset, stop_offset=None):
         new_file = os.fdopen(os.dup(self._file.fileno()), "rb")
         new_file.seek(offset)
         return new_file
@@ -100,12 +81,11 @@ class HTTPTransport(object):
     remote = True
 
     def __init__(self, url):
-        # XX proper checking on import
-        import requests
         self._url = url
+        self.name = url
 
     _crange_re = re.compile(r"^bytes (\d+)-")
-    def _response_offset(self, response):
+    def _check_offset(self, response, desired_offset):
         # http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.16
         # Content-Range tells you what data you actually got, and looks like:
         #   "bytes X-Y/Z"
@@ -113,32 +93,39 @@ class HTTPTransport(object):
         #   "bytes */Z"
         # where X & Y are integers, and Z is either an integers or "*"
         # The second form is only allowed on error responses.
-        crange = response.header.get("Content-Range", "")
+        crange = response.headers.get("Content-Range", "")
         match = self._crange_re.match(crange)
         if not match:
-            return 0
-        return int(match.group(1))
+            offset = 0
+        else:
+            offset = int(match.group(1))
+        if offset != desired_offset:
+            raise ZSSError("HTTP server did not respect Range: request")
 
     # XX put an LRU cache on this
     def chunk_read(self, offset, length):
-        headers = {"Range": "bytes=%s-%s" % (offset, offset + length)}
+        # -1 because Range: is inclusive
+        headers = {"Range": "bytes=%s-%s" % (offset, offset + length - 1)}
         response = requests.get(self._url, headers=headers)
         # if we got an error response, raise an exception
         response.raise_for_status()
-        if offset != self._response_offset(response):
-            raise ZSSError("HTTP server did not respect Range: request")
+        self._check_offset(response, offset)
         # .content is the byte (not text) version of the response
         return response.content
 
-    def stream_read(self, offset, end_offset=None):
-        if end_offset is None:
-            end_offset = ""
+    def stream_read(self, offset, stop_offset=None):
+        if stop_offset is None:
+            stop_offset = ""
+        else:
+            stop_offset -= 1
+            if stop_offset < offset:
+                # server will just return 416, Requested range not satisfiable
+                return BytesIO(b"")
         # Limited range is "100-200", endless range is "100-".
-        headers = {"Range": "bytes=%s-%s" % (offset, end_offset)}
-        response = requests.get(self._url, header=headers, stream=True)
+        headers = {"Range": "bytes=%s-%s" % (offset, stop_offset)}
+        response = requests.get(self._url, headers=headers, stream=True)
         response.raise_for_status()
-        if offset != self._response_offset(response):
-            raise ZSSError("HTTP server did not respect Range: request")
+        self._check_offset(response, offset)
         return _HTTPStream(offset, response)
 
     def close(self):
@@ -154,7 +141,7 @@ class _HTTPStream(object):
 
     def read(self, length):
         for chunk in self._response.iter_content(length):
-            offset += len(chunk)
+            self._offset += len(chunk)
             return chunk
         return b""
 
@@ -190,9 +177,13 @@ def _fsck_helper(offset, block_level, zdata, stop, decompress_fn):
     return (offset, block_level, len(zdata), decompress_fn(zdata))
 
 class ZSS(object):
-    def __init__(self, path, parallelism="auto"):
-        self._path = path
-        self._transport = FileTransport(path)
+    def __init__(self, path=None, url=None, parallelism="auto"):
+        if path is not None and url is None:
+            self._transport = FileTransport(path)
+        elif path is None and url is not None:
+            self._transport = HTTPTransport(url)
+        else:
+            raise ValueError("exactly one of path= or url= must be given")
 
         header = self._get_header()
 
@@ -234,10 +225,10 @@ class ZSS(object):
         magic = read_n(stream, len(MAGIC))
         if magic == INCOMPLETE_MAGIC:
             raise ZSSCorrupt("%s: looks like this ZSS file was only "
-                             "partially written" % (self._path,))
+                             "partially written" % (self._transport.name,))
         if magic != MAGIC:
             raise ZSSCorrupt("%s: bad magic number (are you sure this is "
-                             "a ZSS file?)" % (self._path))
+                             "a ZSS file?)" % (self._transport.name))
         header_data_length, = read_format(stream, header_data_length_format)
 
         needed = header_data_length + CRC_LENGTH
@@ -249,7 +240,8 @@ class ZSS(object):
         header_encoded = read_n(stream, header_data_length)
         header_crc = read_n(stream, CRC_LENGTH)
         if encoded_crc32c(header_encoded) != header_crc:
-            raise ZSSCorrupt("%s: header checksum mismatch" % (self._path,))
+            raise ZSSCorrupt("%s: header checksum mismatch"
+                             % (self._transport.name,))
 
         return _decode_header_data(header_encoded)
 
@@ -276,11 +268,16 @@ class ZSS(object):
     # contains entries that are >= the needle.
     #
     # Suppose these are our blocks:
-    #    [a b c d e] [f g h i j]
+    #    [b c d e] [f g h i j]
     # and our needle is "d". We can't return a pointer to "d" directly, we
     # have to return a pointer to one of the blocks, i.e., to either "a" or
     # "f". round_down=True means we return a pointer to the "a" block,
     # round_down=False means we return a pointer to the "f" block.
+    #
+    # There are two corner cases. If we get asked to look for "a", then we
+    # always return the "b" block. If we get asked to look for "m", then if
+    # round_down=True we return the "f" block, and if round_down=False we
+    # return None.
     def _find_ge_block(self, needle, round_down):
         offset = self._root_index_offset
         block_length = self._root_index_length
@@ -296,6 +293,10 @@ class ZSS(object):
             # such a block.
             if round_down and idx != 0:
                 idx -= 1
+            if idx > len(offsets):
+                # there are no blocks whose first entry is >= needle. (This
+                # can only happen if round_down=False.)
+                return None
             offset = offsets[idx]
             block_length = block_lengths[idx]
             # Our (offset, block_length) now point to a block whose block
@@ -327,7 +328,9 @@ class ZSS(object):
         start_offset = self._find_ge_block(start, True)
         stop_offset = None
         if self._transport.remote and stop is not None:
-            stop_offset = self._find_ge_key(stop, False)
+            # This can return None. Fortunately stream_read can accept None as
+            # a stop offset.
+            stop_offset = self._find_ge_block(stop, False)
         return self._transport.stream_read(start_offset, stop_offset)
 
     # This is a powerful, low-level function, which is somewhat fiddly to
@@ -440,7 +443,8 @@ class ZSS(object):
     def fsck(self):
         self._check_closed()
         def fail(offset, msg):
-            raise ZSSCorrupt("%s at %s: %s" % (self._path, offset, msg))
+            raise ZSSCorrupt("%s at %s: %s"
+                             % (self._transport.name, offset, msg))
 
         block_prefix_length = struct.calcsize(block_prefix_format)
         last_record_by_level = {}
