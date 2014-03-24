@@ -16,7 +16,7 @@ import requests
 
 from nose.plugins.skip import SkipTest
 
-from .test import test_data_path, tempname
+from .test_util import test_data_path, tempname
 
 # a random number
 PORT = 43124
