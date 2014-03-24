@@ -3,17 +3,14 @@
 # See file LICENSE.txt for license information.
 
 import sys
-import os
 import struct
 import json
-from six import BytesIO
 from bisect import bisect_left
-import re
 from contextlib import closing
 from collections import namedtuple, deque
 import multiprocessing
 
-import requests
+from six import BytesIO, byte2int, int2byte
 
 from .futures import SerialExecutor, ProcessPoolExecutor
 from .common import (ZSSError,
@@ -24,12 +21,12 @@ from .common import (ZSSError,
                      CRC_LENGTH,
                      header_data_length_format,
                      header_data_format,
-                     block_prefix_format,
                      codecs,
                      read_n,
                      read_format)
-from ._zss import unpack_data_records, unpack_index_records
+from ._zss import unpack_data_records, unpack_index_records, read_uleb128
 from .lru import LRU
+from .transport import FileTransport, HTTPTransport
 
 # How much data to read from the header on our first request on slow
 # transports. If the header is shorter than this, then we waste a bit of
@@ -51,111 +48,44 @@ def _decode_header_data(encoded):
             fields[field], = read_format(f, field_format)
     return fields
 
-class FileTransport(object):
-    remote = False
+def _get_raw_block_unchecked(stream):
+    # Returns (None, None) for EOF
+    length = read_uleb128(stream)
+    if length is None:
+        # EOF
+        return (None, None)
+    block_contents = stream.read(length)
+    checksum = stream.read(CRC_LENGTH)
+    if len(block_contents) != length or len(checksum) != CRC_LENGTH:
+        raise ZSSCorrupt("unexpected EOF")
+    return block_contents, checksum
 
-    def __init__(self, path):
-        self._file = open(path, "rb")
-        # To include in user-directed error messages etc.
-        self.name = path
-
-    # This allows partial reads (i.e., if EOF falls in the middle of the
-    # requested chunk, then we return the part before the EOF). Fortunately,
-    # this is how both normal Python read() and how HTTP Range work
-    # out-of-the-box.
-    def chunk_read(self, offset, length):
-        self._file.seek(offset)
-        return self._file.read(length)
-
-    # Returns a file-like object which will return bytes from the given
-    # position. 'stop_offset', if given, is a hint -- the returned file-like
-    # object may or may not EOF after reaching this point.
-    def stream_read(self, offset, stop_offset=None):
-        new_file = os.fdopen(os.dup(self._file.fileno()), "rb")
-        new_file.seek(offset)
-        return new_file
-
-    def close(self):
-        self._file.close()
-
-class HTTPTransport(object):
-    remote = True
-
-    def __init__(self, url):
-        self._url = url
-        self.name = url
-
-    _crange_re = re.compile(r"^bytes (\d+)-")
-    def _check_offset(self, response, desired_offset):
-        # http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.16
-        # Content-Range tells you what data you actually got, and looks like:
-        #   "bytes X-Y/Z"
-        # or
-        #   "bytes */Z"
-        # where X & Y are integers, and Z is either an integers or "*"
-        # The second form is only allowed on error responses.
-        crange = response.headers.get("Content-Range", "")
-        match = self._crange_re.match(crange)
-        if not match:
-            offset = 0
-        else:
-            offset = int(match.group(1))
-        if offset != desired_offset:
-            raise ZSSError("HTTP server did not respect Range: request")
-
-    def chunk_read(self, offset, length):
-        # -1 because Range: is inclusive
-        headers = {"Range": "bytes=%s-%s" % (offset, offset + length - 1)}
-        response = requests.get(self._url, headers=headers)
-        # if we got an error response, raise an exception
-        response.raise_for_status()
-        self._check_offset(response, offset)
-        # .content is the byte (not text) version of the response
-        return response.content
-
-    def stream_read(self, offset, stop_offset=None):
-        if stop_offset is None:
-            stop_offset = ""
-        else:
-            stop_offset -= 1
-            if stop_offset < offset:
-                # server will just return 416, Requested range not satisfiable
-                return BytesIO(b"")
-        # Limited range is "100-200", endless range is "100-".
-        headers = {"Range": "bytes=%s-%s" % (offset, stop_offset)}
-        response = requests.get(self._url, headers=headers, stream=True)
-        response.raise_for_status()
-        self._check_offset(response, offset)
-        return _HTTPStream(offset, response)
-
-    def close(self):
-        pass
-
-class _HTTPStream(object):
-    def __init__(self, offset, response):
-        self._response = response
-        self._offset = offset
-
-    def tell(self):
-        return self._offset
-
-    def read(self, length):
-        for chunk in self._response.iter_content(length):
-            self._offset += len(chunk)
-            return chunk
-        return b""
-
-    def close(self):
-        self._response.close()
+def _check_block(raw_block, checksum):
+    if encoded_crc32c(raw_block) != checksum:
+        raise ZSSCorrupt("checksum mismatch at %s" % (offset,))
+    block_level = byte2int(raw_block[0])
+    zdata = raw_block[1:]
+    return (block_level, zdata)
 
 class _ZSSMapStop(Exception):
     pass
 
-def _decompress_helper(offset, block_level, zdata, stop, decompress_fn):
+class _ZSSMapSkip(object):
+    pass
+
+def _map_raw_helper(offset, block_length, raw_block, checksum,
+                    skip_index, stop, fn, args, kwargs):
+    block_level, zdata = _check_block(raw_block, checksum)
+    if skip_index and block_level > 0:
+        return _ZSSMapSkip
+    return fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
+
+def _decompress_helper(offset, block_length,
+                       block_level, zdata, stop, decompress_fn):
     # stopping has to be left to the next level up
     return decompress_fn(zdata)
 
-def _map_helper(offset, block_level, zdata, stop, decompress_fn,
+def _map_helper(offset, block_length, block_level, zdata, stop, decompress_fn,
                 user_fn, user_args, user_kwargs):
     data = decompress_fn(zdata)
     records = unpack_data_records(data)
@@ -173,8 +103,9 @@ def _dump_helper(records, start, stop, terminator):
     records.append(b"")
     return terminator.join(records)
 
-def _fsck_helper(offset, block_level, zdata, stop, decompress_fn):
-    return (offset, block_level, len(zdata), decompress_fn(zdata))
+def _fsck_helper(offset, block_length, block_level, zdata, stop,
+                 decompress_fn):
+    return (offset, block_length, block_level, decompress_fn(zdata))
 
 class ZSS(object):
     def __init__(self, path=None, url=None,
@@ -206,9 +137,9 @@ class ZSS(object):
             # XX put an upper bound on this
             parallelism = multiprocessing.cpu_count()
         self._parallelism = parallelism
-        if self._parallelism < 1:
-            raise ZSSError("parallelism must be >= 1 or \"auto\"")
-        if parallelism == 1:
+        if self._parallelism < 0:
+            raise ZSSError("parallelism must be >= 0 or \"auto\"")
+        if parallelism == 0:
             self._executor = SerialExecutor()
         else:
             self._executor = ProcessPoolExecutor(parallelism)
@@ -249,20 +180,13 @@ class ZSS(object):
 
         return _decode_header_data(header_encoded)
 
-    def _get_next_raw_block(self, stream):
-        # Returns (None, None) for EOF
-        try:
-            (block_level,
-             zdata_length) = read_format(stream, block_prefix_format)
-        except ZSSCorrupt:
-            # EOF
-            return (None, None)
-        zdata = stream.read(zdata_length)
-        return (block_level, zdata)
-
     def _get_index_block_impl(self, offset, block_length):
         chunk = self._transport.chunk_read(offset, block_length)
-        block_level, zdata = self._get_next_raw_block(BytesIO(chunk))
+        if len(chunk) != block_length:
+            raise ZSSCorrupt("partial read on index block @ %s, length %s"
+                             % (offset, block_length))
+        raw_block, checksum = _get_raw_block_unchecked(BytesIO(chunk))
+        block_level, zdata = _check_block(raw_block, checksum)
         assert block_level > 0
         data = self._decompress(zdata)
         return (block_level, unpack_index_records(data))
@@ -317,7 +241,7 @@ class ZSS(object):
         if prefix is not None:
             start = max(prefix, start)
             if prefix:
-                prefix_stop = prefix[:-1] + chr(ord(prefix[-1]) + 1)
+                prefix_stop = prefix[:-1] + int2byte(byte2int(prefix[-1]) + 1)
             if stop is None:
                 stop = prefix_stop
             else:
@@ -336,21 +260,20 @@ class ZSS(object):
             stop_offset = self._find_ge_block(stop, False)
         return self._transport.stream_read(start_offset, stop_offset)
 
-    # This is a powerful, low-level function, which is somewhat fiddly to
-    # use. (But all the more user-friendly functions are implemented in terms
-    # of it.)
+    # This is a low-level function with somewhat fiddly semantics. (But all
+    # the more user-friendly functions are implemented in terms of it.)
     #
     # It finds all blocks which may contain records that are >= start, and
     # then for each such block it calls
     #
-    #   fn(offset, block_level, zdata, stop, *args, **kwargs)
+    #   fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
     #
     # Key points:
     # - If skip_index is true, then it skips over index blocks (i.e.,
     #   block_level will always be 0).
-    # - These calls are performed in parallel on however many parallelism were
+    # - These calls are performed in parallel on however many workers were
     #   configured when this ZSS object was created; therefore, fn, args, and
-    #   kwargs must all be pickleable.
+    #   kwargs must all be pickleable (unless you use parallelism=0).
     # - The iteration may or may not stop when the 'stop' key is reached. If
     #   you want it to stop for sure at any point, you must either (a) raise a
     #   _ZSSMapStop from your callback function, or (b) call .close() on this
@@ -361,21 +284,33 @@ class ZSS(object):
             eof = False
             try:
                 while q or not eof:
-                    while not eof and len(q) < self._parallelism:
+                    value = _ZSSMapSkip
+                    # If we have n workers, then when we yield we want to
+                    # leave at least n jobs in the queue, so the workers all
+                    # have something to do while our caller is getting on with
+                    # things in the main process. Therefore we have to push at
+                    # least n + 1 jobs into the queue, so we can yield one and
+                    # have the appropriate number left over. (Notice that this
+                    # reasoning still works for n == 0.)
+                    while not eof and len(q) < self._parallelism + 1:
                         offset = stream.tell()
-                        block_level, zdata = self._get_next_raw_block(stream)
-                        if block_level is None:
+                        (raw_block, checksum) = _get_raw_block_unchecked(stream)
+                        block_length = stream.tell() - offset
+                        if raw_block is None:
                             eof = True
                             continue
-                        if skip_index and block_level > 0:
-                            continue
-                        f = self._executor.submit(fn,
-                                                  offset, block_level, zdata,
-                                                  stop, *args, **kwargs)
+                        f = self._executor.submit(_map_raw_helper,
+                                                  offset, block_length,
+                                                  raw_block, checksum,
+                                                  skip_index, stop,
+                                                  fn, args, kwargs)
                         q.append(f)
                     if q:
-                        yield q.popleft().result()
+                        value = q.popleft().result()
+                        if value is not _ZSSMapSkip:
+                            yield value
             except _ZSSMapStop:
+                # Some job requested early termination of the loop.
                 pass
             finally:
                 while q:
@@ -449,7 +384,6 @@ class ZSS(object):
             raise ZSSCorrupt("%s at %s: %s"
                              % (self._transport.name, offset, msg))
 
-        block_prefix_length = struct.calcsize(block_prefix_format)
         last_record_by_level = {}
         # prev_last_record may be None
         UnrefBlock = namedtuple("UnrefBlock",
@@ -460,8 +394,7 @@ class ZSS(object):
         mrb = self._map_raw_block
         with closing(mrb(None, None, False,
                          _fsck_helper, self._decompress)) as it:
-            for offset, block_level, zdata_length, data in it:
-                block_length = block_prefix_length + zdata_length
+            for offset, block_length, block_level, data in it:
                 if block_level == 0:
                     records = unpack_data_records(data)
                 else:

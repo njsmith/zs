@@ -23,10 +23,9 @@ from zss.common import (ZSSError,
                         encoded_crc32c,
                         header_data_format,
                         header_data_length_format,
-                        block_prefix_format,
                         codecs,
                         read_format)
-from zss._zss import pack_data_records, pack_index_records
+from zss._zss import pack_data_records, pack_index_records, write_uleb128
 
 def _flush_file(f):
     f.flush()
@@ -260,8 +259,7 @@ class _ZSSDataAppender(object):
         # Opening in append mode should put us at the end of the file, but
         # just in case...
         self._file.seek(0, 2)
-        self._offset = self._file.tell()
-        assert self._offset > 0
+        assert self._file.tell() > 0
 
         self._branching_factor = branching_factor
         self._compress_fn = compress_fn
@@ -278,12 +276,12 @@ class _ZSSDataAppender(object):
         if not (0 <= level <= MAX_LEVEL):
             raise ZSSError("invalid level %s" % (level,))
 
-        block_offset = self._offset
-        block_prefix = struct.pack(block_prefix_format, level, len(zdata))
-        self._file.write(block_prefix)
-        self._file.write(zdata)
-        total_block_length = len(block_prefix) + len(zdata)
-        self._offset += total_block_length
+        block_offset = self._file.tell()
+        block_contents = six.int2byte(level) + zdata
+        write_uleb128(len(block_contents), self._file)
+        self._file.write(block_contents)
+        self._file.write(encoded_crc32c(block_contents))
+        total_block_length = self._file.tell() - block_offset
 
         if level >= len(self._level_entries):
             # First block we've seen at this level

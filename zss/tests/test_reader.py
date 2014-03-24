@@ -140,6 +140,7 @@ def test_http_notices_lack_of_range_support():
         assert_raises(ZSSError, lambda: list(ZSS(url=url)))
 
 # next:
+# - crc protection for block level
 # - add real fsck tests
 # - add a test to writer that just writes, checks metadata, checks contents,
 #   and calls fsck()

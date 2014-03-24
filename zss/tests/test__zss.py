@@ -28,15 +28,24 @@ def test_crc32c():
 def test_buf_write_uleb128():
     cython_test_buf_write_uleb128()
 
+def test_write_uleb128():
+    def t(value, expected_data):
+        f = six.BytesIO()
+        write_uleb128(value, f)
+        assert f.getvalue() == expected_data
+    t(1, b"\x01")
+    t(0x81, b"\x81\x01")
+    t(1 << 43, b"\x80\x80\x80\x80\x80\x80\x02")
+
 def test_buf_read_uleb128():
     cython_test_buf_read_uleb128()
 
 def test_read_uleb128():
     def t(data, expected_value, expected_len):
         f = six.BytesIO(data)
-        value, extra_bytes = read_uleb128(f)
+        value = read_uleb128(f)
         assert value == expected_value
-        assert data[expected_len:] == (extra_bytes + f.read())
+        assert data[expected_len:] == f.read()
 
     t(b"\x01", 1, 1)
     t(b"\x01" + b"\x02" * 50, 1, 1)

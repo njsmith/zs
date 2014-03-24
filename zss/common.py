@@ -19,9 +19,10 @@
 # HEADER := header_data_length header_data header_data_crc32c
 # header_data_length, header_data_crc32c := little-endian uint32
 # header_data := (see below)
-# BLOCK := level zdata_length compress(BLOCK_DATA)
+# BLOCK := contents_length BLOCK_CONTENTS checksum
+# contents_length := uleb128
+# BLOCK_CONTENTS := block_level compress(BLOCK_DATA)
 # level := uint8
-# zdata_length := uint64
 # if level = 0x00:
 #   BLOCK_DATA := (record_length data_record)*
 # if level > 0x00:
@@ -65,15 +66,13 @@ header_data_format = [
     # A unique identifier for this archive.
     ("uuid", "16s"),
     # A null-padded code for the storage algorithm used. So far:
-    #   "zlib"
+    #   "none"
+    #   "deflate"
     #   "bzip2"
-    #   "none+crc32c"
     ("compression", "16s"),
     # "<I" giving length, then arbitrary utf8-encoded json
     ("metadata", "length-prefixed-utf8-json"),
     ]
-
-block_prefix_format = "<BQ"
 
 class ZSSError(Exception):
     pass
@@ -85,28 +84,40 @@ def encoded_crc32c(data):
     return struct.pack("<I", zss._zss.crc32c(data))
 
 # Standardize the name of the compress_level argument:
-def zlib_compress(data, compress_level=6):
-    return zlib.compress(data, compress_level)
+def deflate_compress(data, compress_level=6):
+    # Weird poorly-documented zlib feature: you can get raw 'deflate' by
+    # passing a negative 'wbits' argument. So wbits=15 (the default) produces
+    # data with a zlib header and checksum (RFC 1950), while wbits=-15 gives
+    # the same data but with no framing ("raw deflate", RFC 1951). We don't
+    # need the framing and we have our own checksum, so raw deflate is good
+    # for us.
+    compressor = zlib.compressobj(compress_level, zlib.DEFLATED, -15)
+    zdata = compressor.compress(data)
+    zdata += compressor.flush()
+    return zdata
+
+def deflate_decompress(zdata):
+    return zlib.decompress(zdata, -15)
 
 # Standardize the name of the compress_level argument:
 def bz2_compress(data, compress_level=9):
+    # This uses bz2 framing, which is wasteful and means we end up with a
+    # double-checksum, but checksumming is more than an order of magnitude
+    # faster than bz2 itself, and there's no practical way to get a 'raw' bz2
+    # stream, so oh well.
     return bz2.compress(data, compress_level)
 
-def none_crc32c_compress(data):
-    return data + encoded_crc32c(data)
-
-def none_crc32c_decompress(compressed_data):
-    data = compressed_data[:-4]
-    checksum = compressed_data[-4:]
-    if checksum != encoded_crc32c(data):
-        raise ZSSCorrupt("checksum mismatch")
+def none_compress(data):
     return data
+
+def none_decompress(zdata):
+    return zdata
 
 # These callables must be pickleable for multiprocessing.
 codecs = {
-    "zlib": (zlib_compress, zlib.decompress),
+    "deflate": (deflate_compress, deflate_decompress),
     "bz2": (bz2_compress, bz2.decompress),
-    "none+crc32c": (none_crc32c_compress, none_crc32c_decompress),
+    "none": (none_compress, none_decompress),
     }
 
 def read_n(f, n):

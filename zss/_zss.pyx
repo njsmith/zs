@@ -9,9 +9,7 @@ from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy
 from cpython.ref cimport PyObject
-from cpython.bytes cimport (PyBytes_AsStringAndSize,
-                            PyBytes_FromStringAndSize,
-                            _PyBytes_Resize)
+from cpython.bytes cimport PyBytes_AsStringAndSize, PyBytes_FromStringAndSize
 
 import zss
 
@@ -74,6 +72,14 @@ def cython_test_buf_write_uleb128():
          print(ord(expected[i]), buf[i])
          assert ord(expected[i]) == buf[i]
       print("--- end %s ---" % (value,))
+
+def write_uleb128(value, f):
+   cdef uint8_t buf[_MAX_ULEB128_LENGTH]
+   cdef int written
+   written = buf_write_uleb128(value, buf)
+   assert written <= _MAX_ULEB128_LENGTH
+   data = PyBytes_FromStringAndSize(<char *> buf, written)
+   f.write(data)
 
 cdef uint64_t buf_read_uleb128(uint8_t * buf, size_t buf_len, size_t * offset) except? 0:
     cdef uint64_t value = 0
@@ -150,12 +156,30 @@ def cython_test_buf_read_uleb128():
         assert False, "buf_read_uleb128 failed to catch unnormalized encoding"
 
 def read_uleb128(f):
-   cdef bytes data = f.read(MAX_ULEB128_LENGTH)
-   if not data:
-      return (None, "")
-   cdef size_t offset = 0
-   cdef uint64_t value = buf_read_uleb128(data, len(data), &offset)
-   return value, data[offset:]
+   """Read a uleb128 from file-like object 'f'.
+
+   Returns value, or else None if 'f' is at EOF."""
+   cdef uint8_t buf[_MAX_ULEB128_LENGTH]
+   cdef size_t written = 0
+   cdef size_t read = 0
+   cdef uint64_t value
+   cdef bytes byte
+   cdef uint8_t * byte_p
+   while True:
+      byte = f.read(1)
+      if not byte:
+         if written == 0:
+            return None
+         else:
+            raise zss.ZSSCorrupt("unexpected EOF while reading uleb128")
+      byte_p = byte
+      buf[written] = byte_p[0]
+      written += 1
+      if not buf[written - 1] & 0x80:
+         break
+   value = buf_read_uleb128(buf, _MAX_ULEB128_LENGTH, &read)
+   assert read == written
+   return value
 
 ################################################################
 

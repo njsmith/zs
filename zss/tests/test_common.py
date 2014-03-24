@@ -16,31 +16,12 @@ def test_encoded_crc32c():
 def test_codecs():
     for test_vector in [b"",
                         b"foo",
-                        b"".join([chr(i) for i in xrange(256)]),
+                        b"".join([six.int2byte(i) for i in range(256)]),
                         b"a" * 32768,
                         ]:
         for name, (comp, decomp) in codecs.items():
             print(name)
-            zdata = comp(test_vector)
-            assert decomp(zdata) == test_vector
-            # We only check every 3rd byte, because checking every byte was a
-            # bit slow.
-            for i in range(len(zdata), 3):
-                # flip a bit in byte i and make sure that either it has no
-                # effect or it creates an error
-                corrupted = (zdata[:i]
-                             + chr(ord(zdata[i]) ^ 1)
-                             + zdata[i + 1:])
-                try:
-                    got = decomp(corrupted)
-                except Exception:
-                    # error detected, good!
-                    pass
-                else:
-                    # no error detected -- only okay if the reason no error
-                    # was detected was because the bit we flipped doesn't
-                    # actually affect anything.
-                    assert got == test_vector
+            assert decomp(comp(test_vector)) == test_vector
             # check pickleability
             assert pickle.loads(pickle.dumps(comp)) is comp
             assert pickle.loads(pickle.dumps(decomp)) is decomp
