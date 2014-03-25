@@ -3,7 +3,9 @@ python:
   - 2.7
 before_install:
   - sudo apt-get -qq install nginx
-  - pip install coverage nose-cov Cython
+  - pip install coverage nose-cov
+  # don't bother compiling Cython itself, we're only going to use it once
+  - pip install --install-option="--no-cython-compile" Cython
 install:
   - python setup.py sdist
   - mkdir empty
