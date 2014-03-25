@@ -13,17 +13,17 @@ Why is this useful? Consider just the 3-gram counts from the 2012 US
 English release of the `Google N-grams
 <http://storage.googleapis.com/books/ngrams/books/datasetsv2.html>`_. Google
 distributes this data as a set of gzipped text files. Uncompressed, it
-amounts to over than 9 terabytes -- or even more if you tried to store
-it in a conventional database. Google's compressed files reduce this
-to a mere 1.3 terabytes. However, when stored in this form, the only
-way to find a specific n-gram is to locate the file which contains it,
-and then read through the entire file, which requires decompressing
-the file. For gzip files, decompression is quite slow. For example, if
-we want to find statistics for a phrase like "this is fun", we may
-have to decompress the entire file containing "th" 3-grams, which on a
-fast computer requires 30-40 minutes, and because decompression is an
-intrinsically serial operator, this cannot be reduced by using
-multiple CPUs.
+amounts to over 9 terabytes -- or even more if you tried to store it
+in a conventional database. Google's use of gzip compression reduces
+this to a mere 1.3 terabytes. However, when stored in this form, the
+only way to find a specific n-gram is to locate the file which
+contains it, and then read through the entire file, which requires
+decompressing the file. For gzip files, decompression is quite
+slow. For example, if we want to find statistics for a phrase like
+"this is fun", we may have to decompress the entire file containing
+"th" 3-grams, which on a fast computer (circa 2013) requires 30-40
+minutes. And, because gzip decompression is an intrinsically serial
+operation, this cannot be reduced by using multiple CPUs.
 
 When stored as a ZSS file with bzip2 compression, the 2012 US English
 3-grams require only 0.9 terabytes of disk space (more than 30%
