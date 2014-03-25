@@ -13,14 +13,7 @@ install:
   - mkdir empty
   - cd empty
   - pip install ../dist/*
-  # The following is supposed to help get rid of weird paths in the coverage output. I don't think it works.
   - INSTALLDIR=$(python -c "import os; import zss; print(os.path.dirname(zss.__file__))")
-  - cp ../.coveragerc ./travis-coveragerc
-  - echo >> ./travis-coveragerc
-  - echo '[paths]' >> ./travis-coveragerc
-  - echo "source =" >> ./travis-coveragerc
-  - echo "    $INSTALLDIR" >> ./travis-coveragerc
-  - cat ./travis-coveragerc
 script:
   # The --exe is because python sometimes marks all installed modules
   # as executable, so without --exe nosetests will just ignore
