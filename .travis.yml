@@ -3,7 +3,7 @@ python:
   - 2.7
 before_install:
   - sudo apt-get -qq install nginx
-  - pip install --use-mirrors coverage nose-cov
+  - pip install --use-mirrors coverage nose-cov Cython
 install:
   - python setup.py sdist
   - pip install dist/*
