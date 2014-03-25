@@ -7,9 +7,5 @@ ZSS_QUICK_TEST=1 nosetests --all-modules zss
 nosetests --all-modules --with-cov --cov-conf .coveragerc --cov-report term-missing --cov-report html zss
 
 * Next
-** Add real fsck tests
-*** add a programmatic writer interface, and then have a no-checks mode for it
 ** add a test to writer that just writes, checks metadata, checks contents, and calls fsck()
-** set up travis
 ** docs
-** add some tests for ZSS close() and context manager methods

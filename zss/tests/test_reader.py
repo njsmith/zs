@@ -197,14 +197,74 @@ def test_big_headers():
         assert list(z) == letters_records
 
 def test_broken_files():
-    def open_and_read(p):
-        list(ZSS(p))
-    def open_and_fsck(p):
-        ZSS(p).fsck()
     # Files that should fail even on casual use (no fsck)
-    for basename in ["partial-root", "bad-magic", "incomplete-magic",
-                     "header-checksum", "root-checksum", "bad-codec",
-                     "non-dict-metadata",
-                     ]:
+    for basename, msg_fragment in [
+            ("partial-root", "partial read"),
+            ("bad-magic", "bad magic"),
+            ("incomplete-magic", "partially written"),
+            ("header-checksum", "header checksum"),
+            ("root-checksum", "checksum mismatch"),
+            ("bad-codec", "unrecognized compression"),
+            ("non-dict-metadata", "bad metadata"),
+            ("truncated-data-1", "unexpected EOF"),
+            ("truncated-data-2", "unexpected EOF"),
+            ("truncated-data-3", "unexpected EOF"),
+            ("wrong-root-offset", "checksum mismatch"),
+            ("root-is-data", "expecting index block"),
+            ("wrong-root-level-1", "expecting index block"),
+            ("partial-data-1", "past end of block"),
+            ("partial-data-2", "end of buffer"),
+            ("empty-data", "empty block"),
+            ("partial-index-1", "end of buffer"),
+            ("partial-index-2", "end of buffer"),
+            ("partial-index-3", "past end of block"),
+            ("partial-index-4", "past end of block"),
+            ("empty-index", "empty block"),
+            ]:
+        print(basename)
+        # to prevent accidental false success:
+        assert msg_fragment not in basename
         p = test_data_path("broken-files/%s.zss" % (basename,))
-        assert_raises(ZSSCorrupt, open_and_read, p)
+        with assert_raises(ZSSCorrupt) as cm:
+            with ZSS(p) as z:
+                list(z)
+        assert msg_fragment in str(cm.exception)
+        with assert_raises(ZSSCorrupt) as cm:
+            with ZSS(p) as z:
+                z.fsck()
+        assert msg_fragment in str(cm.exception)
+
+    # Files that might look okay locally, but fsck should detect problems
+    for basename, msg_fragment in [
+            ("unref-data", "unreferenced"),
+            ("unref-index", "unreferenced"),
+            ("wrong-root-length", "root index length"),
+            ("wrong-root-level-2", "level 3 to level 1"),
+            ("repeated-index", "multiple ref"),
+            ("bad-ref-length", "!= actual length"),
+            ("bad-index-order", "unsorted offsets"),
+            ("bad-index-order", "unsorted records"),
+            ("bad-data-order", "unsorted records"),
+            ("bad-index-key-1", "too large for block"),
+            ("bad-index-key-2", "too small for block"),
+            ("bad-index-key-3", "too small for block"),
+            ]:
+        print(basename)
+        # to prevent accidental false success:
+        assert msg_fragment not in basename
+        p = test_data_path("broken-files/%s.zss" % (basename,))
+        with ZSS(p) as z:
+            with assert_raises(ZSSCorrupt) as cm:
+                z.fsck()
+        assert msg_fragment in str(cm.exception)
+
+    # Files that are a bit tricky, but should in fact be okay
+    for basename in [
+            "good-index-key-1",
+            "good-index-key-2",
+            "good-index-key-3",
+            ]:
+        print(basename)
+        with ZSS(test_data_path("broken-files/%s.zss" % (basename,))) as z:
+            list(z)
+            z.fsck()

@@ -67,7 +67,7 @@ class _QUIT(object):
 class ZSSWriter(object):
     def __init__(self, path, metadata, branching_factor, approx_block_size,
                  parallelism, compression="bz2", compress_kwargs={},
-                 uuid=None, show_spinner=True):
+                 uuid=None, show_spinner=True, include_auto_metadata=True):
         self._path = path
         # Technically there is a race condition here, but oh well. This is
         # just a safety/sanity check; it's not worth going through the
@@ -76,10 +76,11 @@ class ZSSWriter(object):
             raise ZSSError("%s: file already exists" % (path,))
         self._file = open(path, "w+b")
         self.metadata = dict(metadata)
-        self.metadata.setdefault("build-user", getpass.getuser())
-        self.metadata.setdefault("build-host", socket.getfqdn())
-        self.metadata.setdefault("build-time",
-                                 datetime.utcnow().isoformat() + "Z")
+        if include_auto_metadata:
+            self.metadata.setdefault("build-user", getpass.getuser())
+            self.metadata.setdefault("build-host", socket.getfqdn())
+            self.metadata.setdefault("build-time",
+                                     datetime.utcnow().isoformat() + "Z")
         self.branching_factor = branching_factor
         self.approx_block_size = approx_block_size
         self._show_spinner = show_spinner

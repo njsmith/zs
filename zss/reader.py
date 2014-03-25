@@ -73,11 +73,6 @@ def test__get_raw_block_unchecked():
     f = BytesIO(b"\x05" + b"\x01" * 5 + b"\x02" * 4)
     assert _get_raw_block_unchecked(f) == (b"\x01" * 5, b"\x02" * 4)
     from nose.tools import assert_raises
-    # It's almost impossible to create a ZSS file that actually shows this
-    # error without hitting another error first. (It has to be
-    # in a block that is *not* read during the initial index lookup, but *is*
-    # at the end of the file -- but usually the root index block is at the end
-    # of the file.) So, we just test it directly:
     f_partial1 = BytesIO(b"\x05" + b"\x01" * 4)
     assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial1)
     f_partial2 = BytesIO(b"\x05" + b"\x01" * 5 + "\x02" * 3)
@@ -208,7 +203,10 @@ class ZSS(object):
                              % (offset, block_length))
         raw_block, checksum = _get_raw_block_unchecked(BytesIO(chunk))
         block_level, zdata = _check_block(offset, raw_block, checksum)
-        assert block_level > 0
+        if block_level == 0:
+            raise ZSSCorrupt("%s:%s: "
+                             "expecting index block but found data block"
+                             % (self._transport.name, offset))
         data = self._decompress(zdata)
         return (block_level, unpack_index_records(data))
 
@@ -405,16 +403,54 @@ class ZSS(object):
 
     def fsck(self):
         self._check_closed()
-        def fail(offset, msg):
-            raise ZSSCorrupt("%s at %s: %s"
-                             % (self._transport.name, offset, msg))
+        failures = []
+        def add_fail(offset, msg):
+            failures.append((offset, msg))
 
-        last_record_by_level = {}
-        # prev_last_record may be None
         UnrefBlock = namedtuple("UnrefBlock",
-                                ["block_level", "prev_last_record",
-                                 "first_record", "block_length"])
+                                ["block_level", "first_record",
+                                 "last_record", "block_length"])
         unref_blocks_by_offset = {}
+
+        def check_index(offset, block_level, records, offsets, block_lengths):
+            if not sorted(offsets) == offsets:
+                add_fail(offset, "unsorted offsets in index block")
+            # The idea is that these will end up indicating the first record
+            # and the last record of the underlying data blocks (recursively)
+            # referenced by this index block. We walk last_record along the
+            # blocks we point to as we go, so we can check each key as we go.
+            first_record = None
+            last_record = None
+            for i, ref_offset in enumerate(offsets):
+                if ref_offset not in unref_blocks_by_offset:
+                    add_fail(offset,
+                             "dangling or multiple refs to %s" % (ref_offset,))
+                    continue
+                ref = unref_blocks_by_offset.pop(ref_offset)
+                if first_record is None:
+                    first_record = ref.first_record
+                if ref.block_level != block_level - 1:
+                    add_fail(offset, "bad index ref from level %s to level %s"
+                             % (block_level, ref.block_level))
+                if (last_record is not None
+                    and not (last_record <= records[i])):
+                    add_fail(offset, "key %s is too small for block at %s"
+                             % (records[i], ref_offset))
+                if not (records[i] <= ref.first_record):
+                    add_fail(offset, "key %s is too large for block at %s"
+                             % (records[i], ref_offset))
+                # advance, to use for next round
+                last_record = ref.last_record
+                if ref.block_length != block_lengths[i]:
+                    add_fail(offset,
+                             "index length %s != actual length %s for "
+                             "block at %s"
+                             % (block_lengths[i], ref.block_length, ref_offset))
+
+            unref_blocks_by_offset[offset]= (
+                UnrefBlock(block_level,
+                           first_record, last_record,
+                           block_length))
 
         mrb = self._map_raw_block
         with closing(mrb(None, None, False,
@@ -426,53 +462,38 @@ class ZSS(object):
                     (records, offsets, block_lengths
                      ) = unpack_index_records(data)
                 if not sorted(records) == records:
-                    fail(offset, "unsorted records within block")
-                if block_level in last_record_by_level:
-                    if records[0] < last_record_by_level[block_level]:
-                        fail(offset, "unsorted records across blocks")
+                    add_fail(offset, "unsorted records within block")
                 assert offset not in unref_blocks_by_offset
-                unref_blocks_by_offset[offset] = (
-                    UnrefBlock(block_level,
-                               last_record_by_level.get(block_level),
-                               records[0],
-                               block_length))
-                last_record_by_level[block_level] = records[-1]
                 if block_level > 0:
-                    if not sorted(offsets) == offsets:
-                        fail(offset, "unsorted offsets in index block")
-                    for (ref_key, ref_offset, ref_block_length) in zip(
-                            records, offsets, block_lengths):
-                        if ref_offset not in unref_blocks_by_offset:
-                            fail(offset,
-                                 "dangling or multiple ref to %s"
-                                 % (ref_offset,))
-                        ref = unref_blocks_by_offset.pop(ref_offset)
-                        if ref.block_level != block_level - 1:
-                            fail(offset, "level %s ref to level %s" % (
-                                block_level, ref.block_level))
-                        if not (ref.prev_last_record
-                                <= ref_key
-                                <= ref.first_record):
-                            fail(offset,
-                                 "bad key in ref to %s" % (ref_offset,))
-                        if ref.block_length != ref_block_length:
-                            fail(offset,
-                                 "index length %s != actual length %s"
-                                 % (ref_block_length, ref.block_length))
+                    check_index(offset, block_level,
+                                records, offsets, block_lengths)
+                else:
+                    unref_blocks_by_offset[offset] = (
+                        UnrefBlock(block_level,
+                                   records[0], records[-1],
+                                   block_length))
 
         # check the root block
         root_ref = unref_blocks_by_offset.pop(self._root_index_offset, None)
         if root_ref is None:
-            fail(self._root_index_offset, "missing root block")
-        if root_ref.block_length != self._root_index_length:
-            fail(self._root_index_offset,
-                 "wrong root index length in header (%s != %s)"
-                 % (self._root_index_length, root_ref.block_length))
+            add_fail(self._root_index_offset,
+                     "root block missing or doubly-referenced")
+        else:
+            if root_ref.block_length != self._root_index_length:
+                add_fail(self._root_index_offset,
+                         "wrong root index length in header (%s != %s)"
+                         % (self._root_index_length, root_ref.block_length))
 
         for offset in unref_blocks_by_offset:
-            fail(offset, "unreferenced block")
+            add_fail(offset, "unreferenced block")
 
-        return "PASS"
+        if failures:
+            failure_strs = ["offset %s: %s" % (offset, msg)
+                            for (offset, msg) in failures]
+            raise ZSSCorrupt("Integrity check failed:\n  "
+                             + "\n  ".join(failure_strs))
+        else:
+            return "PASS"
 
     def close(self):
         self._transport.close()

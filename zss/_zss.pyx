@@ -279,4 +279,6 @@ cdef tuple _unpack_records(bint is_index, bytes block):
             block_length = buf_read_uleb128(buf, buf_len, &buf_offset)
             block_lengths.append(block_length)
     assert buf_offset == buf_len
+    if len(records) == 0:
+       raise zss.ZSSCorrupt("empty block")
     return records, offsets, block_lengths
