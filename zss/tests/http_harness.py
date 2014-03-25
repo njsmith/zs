@@ -102,6 +102,10 @@ def nginx_server(root, port=PORT, error_exc=SkipTest):
                 "  }\n"
                 "}\n"
                 % (pid_path, port, root))
+        # the nginx on Travis insists on always looking for conf files
+        # relative to /etc/nginx
+        absolute_conf_path = os.path.join(*([".."] * 20
+                                            + [os.path.abspath(conf_path)]))
         server = None
         try:
             server = spawn_server([nginx, "-c", conf_path], port)
