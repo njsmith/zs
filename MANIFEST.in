@@ -2,4 +2,5 @@ include tox.ini
 include DEV-NOTES LICENSE.txt README.rst
 include zss/pycrc-crc32c.h zss/pycrc-crc32c.c
 recursive-include doc *
+recursive-include zss/tests/data *
 prune doc/_build

@@ -3,7 +3,7 @@ python:
   - 2.7
 before_install:
   - sudo apt-get -qq install nginx
-  - pip install coverage nose-cov
+  - pip install coverage nose-cov lxml
   # don't bother compiling Cython itself, we're only going to use it once
   - pip install --install-option="--no-cython-compile" Cython
 install:
@@ -16,7 +16,7 @@ script:
   # The --exe is because python sometimes marks all installed modules
   # as executable, so without --exe nosetests will just ignore
   # everything. Baffling, but so it goes.
-  - nosetests --all-modules --with-cov --cov-conf ../.coveragerc --cov-report term-missing zss
+  - nosetests --all-modules --with-cov --cov-conf ../.coveragerc --cov-report term-missing --cov ${INSTALLDIR} zss
 after_success:
   - pip install coveralls && coveralls
 notifications:

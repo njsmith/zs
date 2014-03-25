@@ -1,7 +1,5 @@
-import setuptools
-from distutils.core import setup
-from distutils.extension import Extension
-from Cython.Distutils import build_ext
+from setuptools import setup, Extension, find_packages
+from Cython.Build import cythonize
 
 DESC = """Compressed sorted sets -- a space-efficient, static database."""
 
@@ -19,7 +17,27 @@ setup(
     long_description=LONG_DESC,
     author="Nathaniel J. Smith",
     author_email="njs@pobox.com",
-    packages=["zss"],
+    packages=find_packages(),
+    # This means, just install *everything* you see under zss/, even if it
+    # doesn't look like a source file, so long as it appears in MANIFEST.in:
+    include_package_data=True,
+    # This lets us list some specific things we don't want installed, the
+    # previous line notwithstanding:
+    exclude_package_data={"": ["*.c", "*.pyx", "*.h", "README"],
+                          # WTF this is ridiculous. We have to 'exclude' each
+                          # data directory here so setuptools doesn't think we
+                          # want to copy it, because you can't copy
+                          # directories!  However everything *inside* the
+                          # directories will still be copied. Which implicitly
+                          # creates the directory. So basically this is how
+                          # you say "yes please copy this directory (while
+                          # pretending not to)".  This may get fixed at some
+                          # point:
+                          #   http://bugs.python.org/issue19286
+                          "zss.tests": ["data",
+                                        "data/broken-files",
+                                        "data/http-test",
+                                    ]},
     url="https://github.com/njsmith/zss",
     install_requires=["six", "requests"],
     classifiers =
@@ -29,11 +47,9 @@ setup(
         "License :: OSI Approved :: BSD License",
         "Programming Language :: Python :: 2",
         ],
-    cmdclass={"build_ext": build_ext},
-    package_data={"zss": ["tests/data/*"]},
-    ext_modules=[
+    ext_modules=cythonize([
         Extension("zss._zss",
                   ["zss/_zss.pyx"],
-                  )
-        ],
+              )
+    ]),
 )
