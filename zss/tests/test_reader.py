@@ -203,7 +203,8 @@ def test_broken_files():
         ZSS(p).fsck()
     # Files that should fail even on casual use (no fsck)
     for basename in ["partial-root", "bad-magic", "incomplete-magic",
-                     "header-checksum", "root-checksum",
+                     "header-checksum", "root-checksum", "bad-codec",
+                     "non-dict-metadata",
                      ]:
         p = test_data_path("broken-files/%s.zss" % (basename,))
         assert_raises(ZSSCorrupt, open_and_read, p)
