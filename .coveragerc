@@ -8,3 +8,5 @@ exclude_lines =
   pragma: no cover
   ^def test_
 precision = 1
+
+# NB: travis uses a copy of this file, with an extra [paths] section appended

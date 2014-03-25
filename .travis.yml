@@ -15,10 +15,15 @@ install:
   - pip install ../dist/*
 script:
   - INSTALLDIR=$(python -c "import os; import zss; print(os.path.dirname(zss.__file__))")
+  - cp ../.coveragerc ./travis-coveragerc
+  - echo >> ./travis-coveragerc
+  - echo '[paths]' >> ./travis-coveragerc
+  - echo "source =" >> ./travis-coveragerc
+  - echo "    $INSTALLDIR" >> travis-coveragerc
   # The --exe is because python sometimes marks all installed modules
   # as executable, so without --exe nosetests will just ignore
   # everything. Baffling, but so it goes.
-  - nosetests --all-modules --with-cov --cov-conf ../.coveragerc --cov-report term-missing --cov ${INSTALLDIR} zss
+  - nosetests --all-modules --with-cov --cov-conf ./travis-coveragerc --cov-report term-missing --cov ${INSTALLDIR} zss
 after_success:
   - pip install coveralls && coveralls
 notifications:
