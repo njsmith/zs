@@ -1,5 +1,12 @@
 from setuptools import setup, Extension, find_packages
-from Cython.Build import cythonize
+import os.path
+
+
+if os.path.exists(".this_is_a_checkout"):
+    USE_CYTHON = True
+else:
+    # Don't depend on Cython in builds-from-sdist
+    USE_CYTHON = False
 
 DESC = """Compressed sorted sets -- a space-efficient, static database."""
 
@@ -9,6 +16,18 @@ LONG_DESC = (DESC + "\n"
              "data sets in a way that allows for efficient random access,\n"
              "range queries, and decompression. (Original use case:\n"
              "working with the multi-terabyte Google n-gram releases.)")
+
+if USE_CYTHON:
+    cython_ext = "pyx"
+else:
+    cython_ext = "c"
+ext_modules = [
+    Extension("zss._zss", ["zss/_zss.%s" % (cython_ext,)])
+]
+if USE_CYTHON:
+    from Cython.Build import cythonize
+    #import pdb; pdb.set_trace()
+    ext_modules = cythonize(ext_modules)
 
 setup(
     name="zss",
@@ -47,9 +66,5 @@ setup(
         "License :: OSI Approved :: BSD License",
         "Programming Language :: Python :: 2",
         ],
-    ext_modules=cythonize([
-        Extension("zss._zss",
-                  ["zss/_zss.pyx"],
-              )
-    ]),
+    ext_modules=ext_modules,
 )
