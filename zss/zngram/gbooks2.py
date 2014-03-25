@@ -13,7 +13,7 @@ import cPickle
 import time
 import json
 
-OVERVIEW_URL = "http://books.google.com/ngrams/datasets"
+OVERVIEW_URL = "http://storage.googleapis.com/books/ngrams/books/datasetsv2.html"
 # Version 2
 VERSION = "20120701"
 
