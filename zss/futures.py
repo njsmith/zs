@@ -32,18 +32,25 @@ except ImportError:
     have_process_pool_executor = False
 
 class _SerialFuture(object):
-    def __init__(self, result):
-        self._result = result
+    def __init__(self, fn, args, kwargs):
+        self._fn = fn
+        self._args = args
+        self._kwargs = kwargs
 
     def result(self):
-        return self._result
+        return self._fn(*self._args, **self._kwargs)
 
     def cancel(self):
         pass
 
+# It's important that we defer execution of the function until .result() is
+# called, because zss.reader.ZSS calls .submit() from a separate thread, and
+# .result() from the main thread.  We don't want to be shunting arbitrary
+# calls off to the separate thread. Also, this ensures that exceptions are
+# raised from result(), not submit().
 class SerialExecutor(object):
     def submit(self, fn, *args, **kwargs):
-        return _SerialFuture(fn(*args, **kwargs))
+        return _SerialFuture(fn, args, kwargs)
 
     def shutdown(self):
         pass  # pragma: no cover

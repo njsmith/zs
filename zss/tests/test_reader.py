@@ -61,6 +61,7 @@ def check_letters_zss(z, codec):
                 (None, 2 * byte, byte),
                 (b"m", b"s", byte),
                 ]:
+            print("start=%r, stop=%r, prefix=%r" % (start, stop, prefix))
             expected = letters_records
             if start is not None:
                 expected = [r for r in expected if r >= start]

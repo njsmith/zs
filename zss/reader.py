@@ -7,10 +7,13 @@ import struct
 import json
 from bisect import bisect_left
 from contextlib import closing, contextmanager
-from collections import namedtuple, deque
+from collections import namedtuple
 import multiprocessing
+import threading
+import weakref
 
-from six import BytesIO, byte2int, int2byte
+from six import Iterator, BytesIO, byte2int, int2byte, reraise
+from six.moves import queue
 
 from .futures import SerialExecutor, ProcessPoolExecutor
 from .common import (ZSSError,
@@ -85,17 +88,19 @@ def _check_block(offset, raw_block, checksum):
     zdata = raw_block[1:]
     return (block_level, zdata)
 
+# exception that can be raised by map_raw_block callback functions
 class _ZSSMapStop(Exception):
     pass
 
-class _ZSSMapSkip(object):
+# sentinel used for communication between _map_raw_helper and main process
+class _ZSS_MAP_SKIP(object):
     pass
 
 def _map_raw_helper(offset, block_length, raw_block, checksum,
                     skip_index, stop, fn, args, kwargs):
     block_level, zdata = _check_block(offset, raw_block, checksum)
     if skip_index and block_level > 0:
-        return _ZSSMapSkip
+        return _ZSS_MAP_SKIP
     return fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
 
 def _decompress_helper(offset, block_length,
@@ -103,8 +108,9 @@ def _decompress_helper(offset, block_length,
     # stopping has to be left to the next level up
     return decompress_fn(zdata)
 
-def _map_helper(offset, block_length, block_level, zdata, stop, decompress_fn,
-                user_fn, user_args, user_kwargs):
+def _sloppy_block_map_helper(offset, block_length, block_level, zdata,
+                             stop, decompress_fn,
+                             user_fn, user_args, user_kwargs):
     data = decompress_fn(zdata)
     records = unpack_data_records(data)
     if stop is not None and records[0] >= stop:
@@ -163,6 +169,7 @@ class ZSS(object):
         self._get_index_block = LRU(self._get_index_block_impl,
                                     index_block_cache)
 
+        self._mrbs = weakref.WeakKeyDictionary()
         self._closed = False
 
     def _check_closed(self):
@@ -282,61 +289,179 @@ class ZSS(object):
             stop_offset = self._find_ge_block(stop, False)
         return self._transport.stream_read(start_offset, stop_offset)
 
-    # This is a low-level function with somewhat fiddly semantics. (But all
-    # the more user-friendly functions are implemented in terms of it.)
+    # map_raw theory of operation:
     #
-    # It finds all blocks which may contain records that are >= start, and
-    # then for each such block it calls
-    #
-    #   fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
-    #
-    # Key points:
-    # - If skip_index is true, then it skips over index blocks (i.e.,
-    #   block_level will always be 0).
-    # - These calls are performed in parallel on however many workers were
-    #   configured when this ZSS object was created; therefore, fn, args, and
-    #   kwargs must all be pickleable (unless you use parallelism=0).
-    # - The iteration may or may not stop when the 'stop' key is reached. If
-    #   you want it to stop for sure at any point, you must either (a) raise a
-    #   _ZSSMapStop from your callback function, or (b) call .close() on this
+    # For each map_raw generator, there are several pieces:
+    # - The generator object itself (_map_raw_block_gen), which executes in
+    #   the main thread on demand, whenever user code calls next().
+    # - The readahead thread, which runs in an independent thread in the main
+    #   process. There is one readahead thread for each active map_raw
     #   generator.
-    def _map_raw_block(self, start, stop, skip_index, fn, *args, **kwargs):
-        with closing(self._sloppy_stream(start, stop)) as stream:
-            q = deque()
-            eof = False
-            try:
-                while q or not eof:
-                    value = _ZSSMapSkip
-                    # If we have n workers, then when we yield we want to
-                    # leave at least n jobs in the queue, so the workers all
-                    # have something to do while our caller is getting on with
-                    # things in the main process. Therefore we have to push at
-                    # least n + 1 jobs into the queue, so we can yield one and
-                    # have the appropriate number left over. (Notice that this
-                    # reasoning still works for n == 0.)
-                    while not eof and len(q) < self._parallelism + 1:
-                        offset = stream.tell()
-                        (raw_block, checksum) = _get_raw_block_unchecked(stream)
-                        block_length = stream.tell() - offset
-                        if raw_block is None:
-                            eof = True
-                            continue
-                        f = self._executor.submit(_map_raw_helper,
-                                                  offset, block_length,
-                                                  raw_block, checksum,
-                                                  skip_index, stop,
-                                                  fn, args, kwargs)
-                        q.append(f)
-                    if q:
-                        value = q.popleft().result()
-                        if value is not _ZSSMapSkip:
-                            yield value
-            except _ZSSMapStop:
-                # Some job requested early termination of the loop.
-                pass
-            finally:
-                while q:
-                    q.pop().cancel()
+    # - The pool of worker processes, which is shared by all iterators over a
+    #   single ZSS object. These are accessed via the concurrent.futures API,
+    #   so we don't deal with them directly, we just dispatch work and get
+    #   back results. If parallelism == 0, this might not even exist -- but
+    #   this is invisible to map_raw.. (FIXME: maybe there should just be a
+    #   single global worker pool shared by all ZSS objects?  This would
+    #   require a global parallelism setting, of course. And the
+    #   start/shutdown/change lifespan becomes complicated...)
+    #
+    # The picture to keep in mind:
+    #
+    # +=============+                 +==================+
+    # | generator   |                 | readahead thread |
+    # |           ---- command_queue --->                |
+    # | (main     <--- future_queue  ----                |
+    # |   thread)   |    |            |       |          |
+    # +=============+    |            +=======|==========+
+    #                    |                    |
+    #                    |   +~~~~~~~~~~~~~+  |
+    #                    +---- worker pool <--+
+    #                        +~~~~~~~~~~~~~+
+    #
+    # The generator is responsible for:
+    # - starting up the readahead thread
+    # - shutting down the readahead thread when finished
+    # - providing finished results on demand to user code (when they call
+    #   next())
+    # - communicating flow control information to the readahead thread, so
+    #   that the workers are kept busy, but not too busy.
+    #
+    # The readahead thread is responsible for:
+    # - performing IO on the actual ZSS file (this ensures that it is done in
+    #   a serial manner, but without blocking the main thread).
+    # - taking the bytes read from the ZSS file, and dispatching them to
+    #   workers to unpack and process.
+    # - sending the work handles ('futures') back to the main thread. Again,
+    #   this is done serially, ensuring that the main thread will get results
+    #   in order (regardless of what order the actual work finishes).
+    #
+    # When a map_raw generator finishes, is garbage collected, or is ended by
+    # an explicit call to its .close() method, then it tells the readahead
+    # thread to shut down, and waits for it to finish. This ensures that by
+    # the time .close() completes, the IO stream will be closed, and that no
+    # more work will be enqueued.
+    #
+    # In addition, the ZSS object keeps weak references to all active map_raw
+    # generators, and when a ZSS object is closed it explicitly closes all
+    # generators. Once they are closed, we know that the threads are all dead,
+    # so it is safe to shut down the worker processes etc.
+    #
+    # Each map_raw generator and readahead thread keeps a strong reference to
+    # the ZSS object, so the ZSS object cannot be garbage-collected while any
+    # map_raw iterations are active.
+
+    # Sentinels used for communication between the readahead thread and the
+    # main thread.
+    class _MAP_CONTINUE(object):
+        pass
+
+    class _MAP_QUIT(object):
+        pass
+
+    class _MAP_EOF(object):
+        pass
+
+    class _MapErrorFuture(object):
+        def __init__(self, exc_info):
+            self._exc_info = exc_info
+
+        def result(self):
+            reraise(*self._exc_info)
+
+    def _readahead_thread(self, stream, stop, skip_index, fn, args, kwargs,
+                          command_queue, future_queue):
+        try:
+            while command_queue.get() is not self._MAP_QUIT:
+                try:
+                    offset = stream.tell()
+                    (raw_block, checksum) = _get_raw_block_unchecked(stream)
+                    block_length = stream.tell() - offset
+                    if raw_block is None:
+                        future_queue.put(self._MAP_EOF)
+                        return
+                    f = self._executor.submit(_map_raw_helper,
+                                              offset, block_length,
+                                              raw_block, checksum,
+                                              skip_index, stop,
+                                              fn, args, kwargs)
+                    future_queue.put(f)
+                # This can happen if, e.g., _get_raw_block_unchecked errors
+                # out in a corrupt file.
+                except Exception:
+                    future_queue.put(self._MapErrorFuture(sys.exc_info()))
+            else:
+                # we got a QUIT, which means our consumer has disappeared, so
+                # it would be polite to try and cancel any outstanding jobs.
+                try:
+                    while True:
+                        f = future_queue.get_nowait()
+                        assert f is not self._MAP_EOF
+                        f.cancel()
+                except queue.Empty:
+                    pass
+        finally:
+            stream.close()
+
+    def _map_raw_block(self, *args, **kwargs):
+        """This is a low-level function with somewhat fiddly semantics.
+
+        All the more user-friendly functions are implemented in terms of it.
+
+        It finds all blocks which may contain records that are >= start, and
+        then for each such block it calls
+
+          fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
+
+        Key points:
+        - If skip_index is true, then it skips over index blocks (i.e.,
+          block_level will always be 0).
+
+        - These calls are performed in parallel in however many worker
+          processes were configured when this ZSS object was created;
+          therefore, fn, args, and kwargs must all be pickleable (unless you
+          use parallelism=0).
+
+        - The iteration may or may not stop when the 'stop' key is reached. If
+          you want it to stop for sure at any point, you must either (a) raise
+          a _ZSSMapStop from your callback function, or (b) call .close() on
+          this generator.
+        """
+        gen = self._map_raw_block_gen(*args, **kwargs)
+        self._mrbs[gen] = 1
+        return gen
+
+    def _map_raw_block_gen(self, start, stop, skip_index, fn, *args, **kwargs):
+        stream = self._sloppy_stream(start, stop)
+        command_queue = queue.Queue()
+        future_queue = queue.Queue()
+        for i in range(self._parallelism):
+            command_queue.put(self._MAP_CONTINUE)
+        rt = threading.Thread(target=self._readahead_thread,
+                              args=(stream,
+                                    stop, skip_index, fn, args, kwargs,
+                                    command_queue, future_queue))
+        try:
+            rt.start()
+            while True:
+                command_queue.put(self._MAP_CONTINUE)
+                future = future_queue.get()
+                if future is self._MAP_EOF:
+                    return
+                value = future.result()
+                if value is not _ZSS_MAP_SKIP:
+                    yield value
+        except _ZSSMapStop:
+            # Some job requested early termination of the loop
+            return
+        finally:
+            # We can reach this point in a number of situations:
+            # - regular exit from above loop
+            # - error exit from above loop
+            # - .close() called on generator
+            # - generator is garbage collected
+            command_queue.put(self._MAP_QUIT)
+            rt.join()
 
     def sloppy_block_search(self, start=None, stop=None, prefix=None):
         # This does decompression in the worker, and unpacking in the main
@@ -362,7 +487,7 @@ class ZSS(object):
         self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         mrb = self._map_raw_block
-        with closing(mrb(start, stop, True, _map_helper,
+        with closing(mrb(start, stop, True, _sloppy_block_map_helper,
                          self._decompress, fn, args, kwargs)) as it:
             for result in it:
                 yield result
@@ -496,6 +621,15 @@ class ZSS(object):
             return "PASS"
 
     def close(self):
+        # Slightly weird construct b/c the way garbage collection works, an
+        # mrb can disappear at any time, and invalidate our iterator over
+        # ._mrbs(). So safest not to use any iterator for more than one step.
+        while self._mrbs:
+            for mrb in self._mrbs:
+                self._mrbs.pop(mrb, None)
+                if mrb is not None:
+                    mrb.close()
+                break
         self._transport.close()
         self._executor.shutdown()
         self._closed = True
