@@ -114,7 +114,7 @@ def check_letters_zss(z, codec):
     assert_raises(ValueError, z.sloppy_block_exec,
                   _check_raise_helper, args=(ValueError,))
 
-    z.fsck()
+    z.validate()
 
 def test_zss():
     for codec in zss.common.codecs:
@@ -155,10 +155,12 @@ def test_zss_close():
                   z.sloppy_block_map(_check_raise_helper, AssertionError)],
                  [list, z],
                  [z.dump, BytesIO()],
-                 [z.fsck],
+                 [z.validate],
                  ]:
         print(repr(call))
         assert_raises(ZSSError, *call)
+    # But calling .close() twice is fine.
+    z.close()
 
 def test_context_manager_closes():
     with ZSS(test_data_path("letters-none.zss")) as z:
@@ -198,7 +200,7 @@ def test_big_headers():
         assert list(z) == letters_records
 
 def test_broken_files():
-    # Files that should fail even on casual use (no fsck)
+    # Files that should fail even on casual use (no validate)
     for basename, msg_fragment in [
             ("partial-root", "partial read"),
             ("bad-magic", "bad magic"),
@@ -232,10 +234,10 @@ def test_broken_files():
         assert msg_fragment in str(cm.exception)
         with assert_raises(ZSSCorrupt) as cm:
             with ZSS(p) as z:
-                z.fsck()
+                z.validate()
         assert msg_fragment in str(cm.exception)
 
-    # Files that might look okay locally, but fsck should detect problems
+    # Files that might look okay locally, but validate should detect problems
     for basename, msg_fragment in [
             ("unref-data", "unreferenced"),
             ("unref-index", "unreferenced"),
@@ -256,7 +258,7 @@ def test_broken_files():
         p = test_data_path("broken-files/%s.zss" % (basename,))
         with ZSS(p) as z:
             with assert_raises(ZSSCorrupt) as cm:
-                z.fsck()
+                z.validate()
         assert msg_fragment in str(cm.exception)
 
     # Files that are a bit tricky, but should in fact be okay
@@ -268,4 +270,4 @@ def test_broken_files():
         print(basename)
         with ZSS(test_data_path("broken-files/%s.zss" % (basename,))) as z:
             list(z)
-            z.fsck()
+            z.validate()

@@ -17,7 +17,7 @@ def main(progname, args):
     args = parser.parse_args(args)
 
     reader = zss.ZSS(args.zss_file)
-    reader.fsck()
+    reader.validate()
 
 if __name__ == "__main__":
-    main("python -m zss.util.check", sys.argv[1:])
+    main("python -m zss.util.validate", sys.argv[1:])

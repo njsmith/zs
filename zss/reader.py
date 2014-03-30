@@ -125,11 +125,38 @@ def _dump_helper(records, start, stop, terminator):
     records.append(b"")
     return terminator.join(records)
 
-def _fsck_helper(offset, block_length, block_level, zdata, stop,
+def _validate_helper(offset, block_length, block_level, zdata, stop,
                  decompress_fn):
     return (offset, block_length, block_level, decompress_fn(zdata))
 
 class ZSS(object):
+    """Object representing a .zss file opened for reading.
+
+    This object can be used as a context manager, e.g.::
+
+        with ZSS("./my/favorite.zss") as z:
+            ...
+
+    :arg path: A string containing an on-disk file to be opened. Exactly one
+      of ``path`` or ``url`` must be specified.
+    :arg url: An HTTP (or HTTPS) URL pointing to a .zss file, which will be
+      accessed directly from the server. The server must support Range:
+      queries. Exactly one of ``path`` or ``url`` must be specified.
+    :arg parallelism: When querying a ZSS file, there are always at least 2
+      threads working in parallel: the main thread, where you iterate over the
+      results and presumably do something with them, and a second thread used
+      for IO. In addition, we can spawn any number of worker processes which
+      will be used internally for decompression and other CPU-intensive
+      tasks. ``parallelism=1`` means to spawn 1 worker process; if you want to
+      perform decompression and other such tasks in serial in your main
+      thread, then uses ``parallelism=0``. The default of ``parallelism="auto"
+      means to spawn one worker process per available CPU.
+    :arg index_block_cache: The number of index blocks to keep cached in
+      memory. This speeds up repeated queries. Larger values provide better
+      caching, but take more memory. Usually you'll want this to at least be
+      as large as the depth of your .zss file's index tree, to ensure that the
+      root block stays cached.
+    """
     def __init__(self, path=None, url=None,
                  parallelism="auto", index_block_cache=32):
         if path is not None and url is None:
@@ -148,9 +175,14 @@ class ZSS(object):
             raise ZSSCorrupt("unrecognized compression format %r"
                              % (compression,))
         self._decompress = codecs[compression][-1]
-        # Some public attributes for the user to peek at if they want:
+        #: The compression method used on this file, as a byte string.
         self.compression = compression
+        #: This file's universally unique identifier (UUID), in the form of a
+        #: 16-byte byte string.
         self.uuid = header["uuid"]
+        #: A .zss file can contain arbitrary metadata in the form of a
+        #: JSON-encoded dictionary. This attribute contains this metadata in
+        #: unpacked form.
         self.metadata = header["metadata"]
         if not isinstance(self.metadata, dict):
             raise ZSSCorrupt("bad metadata")
@@ -464,6 +496,11 @@ class ZSS(object):
             rt.join()
 
     def sloppy_block_search(self, start=None, stop=None, prefix=None):
+        """Finds all blocks which might contain records matching given
+        arguments.  See :meth:`search` for a definition of ``start``,
+        ``stop``, ``match``.
+
+        """
         # This does decompression in the worker, and unpacking in the main
         # process (because no point in unpacking, then pickling, then
         # unpickling)
@@ -501,6 +538,24 @@ class ZSS(object):
                 pass
 
     def search(self, start=None, stop=None, prefix=None):
+        """Iterate over all records matching the given query.
+
+        A record is consider to "match" if:
+        * ``start <= record``
+        * ``record < ``stop``
+        * ``record.startswith(prefix)
+        Any or all of the arguments can be left as ``None``, in which case the
+        corresponding check or checks are not performed.
+
+        Note the asymmetry between ``start`` and ``stop`` -- this is analogous
+        to other Python constructs which use half-open [start, stop) ranges,
+        like :func:`range`.
+
+        If no arguments are given, iterates over the entire contents of the
+        .zss file.
+
+        Records are always returned in sorted order.
+        """
         self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         with closing(self.sloppy_block_search(start, stop)) as block_iter:
@@ -513,11 +568,24 @@ class ZSS(object):
                     yield record
 
     def __iter__(self):
+        """Equivalent to ``zss_obj.search()``."""
         self._check_closed()
         return self.search()
 
     def dump(self, out_file, start=None, stop=None, prefix=None,
              terminator=b"\n"):
+        """Decompress a given range of the .zss file to another file. This is
+        performed in the most efficient available way.
+
+        :arg terminator: A byte string containing a terminator appended to the
+          end of each record. Default is a newline.
+
+        See :meth:`search` for the definition of ``start``, ``stop``, and
+        ``prefix``.
+
+        On Python 3, ``out_file`` must be opened in binary mode.
+
+        """
         self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         sbm = self.sloppy_block_map
@@ -526,7 +594,17 @@ class ZSS(object):
                          args=(start, stop, terminator))) as it:
             out_file.writelines(it)
 
-    def fsck(self):
+    def validate(self):
+        """Validate this .zss file for correctness.
+
+        This method does an exhaustive check of the current file, to validate
+        it for self-consistency and compliance with the ZSS specification. It
+        should catch all cases of disk corruption (with high probability), and
+        all cases of incorrectly constructed files.
+
+        This reads and decompresses the entire file, so may take some time.
+
+        """
         self._check_closed()
         failures = []
         def add_fail(offset, msg):
@@ -579,7 +657,7 @@ class ZSS(object):
 
         mrb = self._map_raw_block
         with closing(mrb(None, None, False,
-                         _fsck_helper, self._decompress)) as it:
+                         _validate_helper, self._decompress)) as it:
             for offset, block_length, block_level, data in it:
                 if block_level == 0:
                     records = unpack_data_records(data)
@@ -621,9 +699,22 @@ class ZSS(object):
             return "PASS"
 
     def close(self):
+        """Close this file.
+
+        This frees all resources. Further operations on this file will raise
+        an error.
+
+        .. note:: If you have any active iterators (from :meth:`search`,
+           :meth:`sloppy_block_map`, etc.), then they will be closed as
+           well. This means that any further attempts to iterate them will
+           raise ``StopIteration``.
+
+        """
         # Slightly weird construct b/c the way garbage collection works, an
         # mrb can disappear at any time, and invalidate our iterator over
         # ._mrbs(). So safest not to use any iterator for more than one step.
+        if self._closed:
+            return
         while self._mrbs:
             for mrb in self._mrbs:
                 self._mrbs.pop(mrb, None)
@@ -633,6 +724,11 @@ class ZSS(object):
         self._transport.close()
         self._executor.shutdown()
         self._closed = True
+
+    def __del__(self):
+        # __del__ gets called even if we error out during __init__
+        if hasattr(self, "_closed"):
+            self.close()
 
     def __enter__(self):
         return self
