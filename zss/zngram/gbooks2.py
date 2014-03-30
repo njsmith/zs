@@ -202,7 +202,9 @@ all: {% for subset in subsets | sort -%}
 
 .PHONY: sorted-{{ subset }} size-check-{{ subset }}
 
-{% set metadata = json_encode({"corpus": corpus_fullname, "subset": subset}) %}
+{% set metadata = json_encode({"format": "google-books-2",
+                               "corpus": corpus_fullname,
+                               "subset": subset}) %}
 
 {% if subset != "0gram" %}
 # Standard sub-corpus (not zero-grams):
@@ -254,7 +256,7 @@ def write_makefile(corpus):
     template = Template(MAKEFILE_TEMPLATE)
     urls = urls_by_corpus()[corpus]
     template.environment.filters["basename"] = os.path.basename
-    corpus_fullname = "%s-%s" % (corpus, VERSION)
+    corpus_fullname = "google-books-%s-%s" % (corpus, VERSION)
     args = {
         "python": sys.executable,
         "corpus": corpus,
