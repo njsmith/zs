@@ -198,7 +198,11 @@ class ZSS(object):
         else:
             self._executor = ProcessPoolExecutor(parallelism)
 
-        self._get_index_block = LRU(self._get_index_block_impl,
+        # This slightly awkward way of setting this up is necessary to prevent
+        # the LRU object from holding a reference to 'self', which would
+        # create a reference loop. (Which would be bad, since we have a
+        # __del__ method.)
+        self._index_block_lru = LRU(ZSS._get_index_block_impl,
                                     index_block_cache)
 
         self._mrbs = weakref.WeakKeyDictionary()
@@ -234,6 +238,9 @@ class ZSS(object):
                              % (self._transport.name,))
 
         return _decode_header_data(header_encoded)
+
+    def _get_index_block(self, offset, block_length):
+        return self._index_block_lru(self, offset, block_length)
 
     def _get_index_block_impl(self, offset, block_length):
         chunk = self._transport.chunk_read(offset, block_length)

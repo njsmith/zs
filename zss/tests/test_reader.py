@@ -162,6 +162,9 @@ def test_zss_close():
     # But calling .close() twice is fine.
     z.close()
 
+    # smoke test for __del__ method
+    ZSS(test_data_path("letters-none.zss"))
+
 def test_context_manager_closes():
     with ZSS(test_data_path("letters-none.zss")) as z:
         assert list(z.search()) == letters_records
