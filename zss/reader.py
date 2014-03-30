@@ -724,9 +724,10 @@ class ZSS(object):
             return
         while self._mrbs:
             for mrb in self._mrbs:
-                self._mrbs.pop(mrb, None)
-                if mrb is not None:
-                    mrb.close()
+                # This is guaranteed to work, because now *we* hold a strong
+                # reference to mrb.
+                self._mrbs.pop(mrb)
+                mrb.close()
                 break
         self._transport.close()
         self._executor.shutdown()
