@@ -127,9 +127,13 @@ def simplehttpserver(root, port=PORT, error_exc=SkipTest):
     finally:
         shutdown_server(server, mod)
 
-web_server = nginx_server
+def web_server(root, port=PORT, error_exc=SkipTest, range_support=True):
+    if range_support:
+        return nginx_server(root, port=port, error_exc=error_exc)
+    else:
+        return simplehttpserver(root, port=port, error_exc=error_exc)
 
-def test_web_server():
+def test_web_servers():
     for server in [nginx_server, simplehttpserver]:
         with server(test_data_path("http-test")) as url:
             response = requests.get(url + "subdir/foo")
@@ -139,3 +143,17 @@ def test_web_server():
         with server(test_data_path("http-test/subdir")) as url:
             assert requests.get(url + "subdir/foo").status_code == 404
             assert requests.get(url + "foo").status_code == 200
+
+def test_range_support():
+    with web_server(test_data_path("http-test"), range_support=False) as url:
+        response = requests.get(url + "subdir/foo",
+                                headers={"Range": "bytes=0-2"})
+        # regular response, ignoring Range:
+        assert response.status_code == 200
+        assert "Content-Range" not in response.headers
+    with web_server(test_data_path("http-test"), range_support=True) as url:
+        response = requests.get(url + "subdir/foo",
+                                headers={"Range": "bytes=0-2"})
+        # Partial data response
+        assert response.status_code == 206
+        assert "Content-Range" in response.headers

@@ -8,8 +8,6 @@ nosetests --all-modules --with-cov --cov-conf .coveragerc --cov-report term-miss
 
 * Next
 
-** tests for transport.py (esp length stuff)
-
 ** crc64
 
 ** replace UUID with sha256 of whole contents

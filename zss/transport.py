@@ -99,7 +99,7 @@ class HTTPTransport(object):
     def length(self):
         if self._length is None:
             response = requests.head(self._url)
-            self._length = response.headers["Content-Length"]
+            self._length = int(response.headers["Content-Length"])
         return self._length
 
     def close(self):

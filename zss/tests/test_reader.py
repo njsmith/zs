@@ -9,7 +9,7 @@ from six import int2byte, byte2int, BytesIO
 from nose.tools import assert_raises
 
 from .util import test_data_path
-from .http_harness import web_server, simplehttpserver
+from .http_harness import web_server
 from zss import ZSS, ZSSError, ZSSCorrupt
 import zss.common
 
@@ -134,7 +134,7 @@ def test_http_zss():
                 check_letters_zss(z, codec)
 
 def test_http_notices_lack_of_range_support():
-    with simplehttpserver(test_data_path()) as root_url:
+    with web_server(test_data_path(), range_support=False) as root_url:
         codec = "bz2"
         url = "%s/letters-%s.zss" % (root_url, codec)
         assert_raises(ZSSError, lambda: list(ZSS(url=url)))
