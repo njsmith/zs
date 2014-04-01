@@ -53,7 +53,7 @@ class SimpleWriter(object):
                                  len(encoded_header)))
         self._header_offset = self.f.tell()
         self.f.write(encoded_header)
-        self.f.write(encoded_crc32c(encoded_header))
+        self.f.write(encoded_crc64xz(encoded_header))
         self._have_root = False
 
     def raw_block(self, block_level, zdata,
@@ -63,7 +63,7 @@ class SimpleWriter(object):
         contents = int2byte(block_level) + zdata
         write_uleb128(len(contents), self.f)
         self.f.write(contents)
-        checksum = encoded_crc32c(contents)
+        checksum = encoded_crc64xz(contents)
         if bad_checksum:
             checksum = b"\x00" * len(checksum)
         if truncate_checksum > 0:
@@ -104,7 +104,7 @@ class SimpleWriter(object):
         assert len(encoded_header) == self._header_length
         self.f.seek(self._header_offset)
         self.f.write(encoded_header)
-        checksum = encoded_crc32c(encoded_header)
+        checksum = encoded_crc64xz(encoded_header)
         if self._bad_header_checksum:
             checksum = b"\x00" * len(checksum)
         self.f.write(checksum)

@@ -20,7 +20,7 @@ from .common import (ZSSError,
                      ZSSCorrupt,
                      MAGIC,
                      INCOMPLETE_MAGIC,
-                     encoded_crc32c,
+                     encoded_crc64xz,
                      CRC_LENGTH,
                      header_data_length_format,
                      header_data_format,
@@ -73,8 +73,8 @@ def _get_raw_block_unchecked(stream):
     return block_contents, checksum
 
 def test__get_raw_block_unchecked():
-    f = BytesIO(b"\x05" + b"\x01" * 5 + b"\x02" * 4)
-    assert _get_raw_block_unchecked(f) == (b"\x01" * 5, b"\x02" * 4)
+    f = BytesIO(b"\x05" + b"\x01" * 5 + b"\x02" * 8 + b"\x03")
+    assert _get_raw_block_unchecked(f) == (b"\x01" * 5, b"\x02" * 8)
     from nose.tools import assert_raises
     f_partial1 = BytesIO(b"\x05" + b"\x01" * 4)
     assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial1)
@@ -82,7 +82,7 @@ def test__get_raw_block_unchecked():
     assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial2)
 
 def _check_block(offset, raw_block, checksum):
-    if encoded_crc32c(raw_block) != checksum:
+    if encoded_crc64xz(raw_block) != checksum:
         raise ZSSCorrupt("checksum mismatch at %s" % (offset,))
     block_level = byte2int(raw_block[0])
     zdata = raw_block[1:]
@@ -240,7 +240,7 @@ class ZSS(object):
 
         header_encoded = read_n(stream, header_data_length)
         header_crc = read_n(stream, CRC_LENGTH)
-        if encoded_crc32c(header_encoded) != header_crc:
+        if encoded_crc64xz(header_encoded) != header_crc:
             raise ZSSCorrupt("%s: header checksum mismatch"
                              % (self._transport.name,))
 

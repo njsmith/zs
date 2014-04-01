@@ -1,20 +1,20 @@
 /**
- * \file pycrc-crc32c.h
+ * \file pycrc-crc64xz.h
  * Functions and types for CRC checks.
  *
- * Generated on Sun Jul  7 16:25:16 2013,
+ * Generated on Tue Apr  1 19:09:25 2014,
  * by pycrc v0.8.1, http://www.tty1.net/pycrc/
  * using the configuration:
- *    Width        = 32
- *    Poly         = 0x1edc6f41
- *    XorIn        = 0xffffffff
+ *    Width        = 64
+ *    Poly         = 0x42f0e1eba9ea3693
+ *    XorIn        = 0xffffffffffffffff
  *    ReflectIn    = True
- *    XorOut       = 0xffffffff
+ *    XorOut       = 0xffffffffffffffff
  *    ReflectOut   = True
  *    Algorithm    = table-driven
  *****************************************************************************/
-#ifndef __PYCRC_CRC32C_H__
-#define __PYCRC_CRC32C_H__
+#ifndef __PYCRC_CRC64XZ_H__
+#define __PYCRC_CRC64XZ_H__
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -33,9 +33,9 @@ extern "C" {
 /**
  * The type of the CRC values.
  *
- * This type must be big enough to contain at least 32 bits.
+ * This type must be big enough to contain at least 64 bits.
  *****************************************************************************/
-typedef uint32_t pycrc_crc32c_t;
+typedef uint_fast64_t pycrc_crc64xz_t;
 
 
 /**
@@ -45,7 +45,7 @@ typedef uint32_t pycrc_crc32c_t;
  * \param data_len     The width of \a data expressed in number of bits.
  * \return             The reflected data.
  *****************************************************************************/
-pycrc_crc32c_t pycrc_crc32c_reflect(pycrc_crc32c_t data, size_t data_len);
+pycrc_crc64xz_t pycrc_crc64xz_reflect(pycrc_crc64xz_t data, size_t data_len);
 
 
 /**
@@ -53,9 +53,9 @@ pycrc_crc32c_t pycrc_crc32c_reflect(pycrc_crc32c_t data, size_t data_len);
  *
  * \return     The initial crc value.
  *****************************************************************************/
-static inline pycrc_crc32c_t pycrc_crc32c_init(void)
+static inline pycrc_crc64xz_t pycrc_crc64xz_init(void)
 {
-    return 0xffffffff;
+    return 0xffffffffffffffff;
 }
 
 
@@ -67,7 +67,7 @@ static inline pycrc_crc32c_t pycrc_crc32c_init(void)
  * \param data_len Number of bytes in the \a data buffer.
  * \return         The updated crc value.
  *****************************************************************************/
-pycrc_crc32c_t pycrc_crc32c_update(pycrc_crc32c_t crc, const unsigned char *data, size_t data_len);
+pycrc_crc64xz_t pycrc_crc64xz_update(pycrc_crc64xz_t crc, const unsigned char *data, size_t data_len);
 
 
 /**
@@ -76,9 +76,9 @@ pycrc_crc32c_t pycrc_crc32c_update(pycrc_crc32c_t crc, const unsigned char *data
  * \param crc  The current crc value.
  * \return     The final crc value.
  *****************************************************************************/
-static inline pycrc_crc32c_t pycrc_crc32c_finalize(pycrc_crc32c_t crc)
+static inline pycrc_crc64xz_t pycrc_crc64xz_finalize(pycrc_crc64xz_t crc)
 {
-    return crc ^ 0xffffffff;
+    return crc ^ 0xffffffffffffffff;
 }
 
 
@@ -86,4 +86,4 @@ static inline pycrc_crc32c_t pycrc_crc32c_finalize(pycrc_crc32c_t crc)
 }           /* closing brace for extern "C" */
 #endif
 
-#endif      /* __PYCRC_CRC32C_H__ */
+#endif      /* __PYCRC_CRC64XZ_H__ */

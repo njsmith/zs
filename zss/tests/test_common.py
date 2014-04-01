@@ -9,9 +9,15 @@ from nose.tools import assert_raises
 
 from ..common import *
 
-def test_encoded_crc32c():
-    assert encoded_crc32c(b"foo") == b"\x1d\xae\xc4\xcf"
-    assert encoded_crc32c(b"\x00" * 32) == b"\xaa\x36\x91\x8a"
+def test_encoded_crc64xz():
+    # Tested against liblzma
+    #   import ctypes
+    #   liblzma = ctypes.CDLL("liblzma.so")
+    #   liblzma.lzma_crc64.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_uint64]
+    #   liblzma.lzma_crc64.restype = ctypes.c_uint64
+    #   liblzma.lzma_crc64(data, len(data), 0)
+    assert encoded_crc64xz(b"foo") == b"\x58\x15\xa9\x7b\x2c\xe6\x2c\x98"
+    assert encoded_crc64xz(b"\x00" * 32) == b"\x0c\x33\xd5\x7c\x61\xf8\x5a\xc9"
 
 def test_codecs():
     for test_vector in [b"",

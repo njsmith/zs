@@ -7,9 +7,6 @@ ZSS_QUICK_TEST=1 nosetests --all-modules zss
 nosetests --all-modules --with-cov --cov-conf .coveragerc --cov-report term-missing --cov-report html zss
 
 * Next
-
-** crc64
-
 ** replace UUID with sha256 of whole contents
 
 ** generate letters files on the fly

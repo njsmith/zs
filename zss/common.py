@@ -16,8 +16,8 @@
 # The file has the format:
 #
 # FILE := magic HEADER BLOCK+
-# HEADER := header_data_length header_data header_data_crc32c
-# header_data_length, header_data_crc32c := little-endian uint32
+# HEADER := header_data_length header_data header_data_crc64xz
+# header_data_length, header_data_crc64xz := little-endian uint64
 # header_data := (see below)
 # BLOCK := contents_length BLOCK_CONTENTS checksum
 # contents_length := uleb128
@@ -44,9 +44,11 @@
 import zlib
 import bz2
 import struct
+import ctypes
+
 import zss._zss
 
-CRC_LENGTH = 4
+CRC_LENGTH = 8
 
 # Reserve the top half of the levels for future extension
 MAX_LEVEL = 127
@@ -82,8 +84,8 @@ class ZSSError(Exception):
 class ZSSCorrupt(ZSSError):
     pass
 
-def encoded_crc32c(data):
-    return struct.pack("<I", zss._zss.crc32c(data))
+def encoded_crc64xz(data):
+    return struct.pack("<Q", zss._zss.crc64xz(data))
 
 # Standardize the name of the compress_level argument:
 def deflate_compress(data, compress_level=6):

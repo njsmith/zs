@@ -20,7 +20,7 @@ from zss.common import (ZSSError,
                         INCOMPLETE_MAGIC,
                         MAX_LEVEL,
                         CRC_LENGTH,
-                        encoded_crc32c,
+                        encoded_crc64xz,
                         header_data_format,
                         header_data_length_format,
                         codecs,
@@ -191,7 +191,7 @@ class ZSSWriter(object):
         if old_length != len(new_encoded_header):
             raise ZSSError("header data length changed")
         self._file.write(new_encoded_header)
-        self._file.write(encoded_crc32c(new_encoded_header))
+        self._file.write(encoded_crc64xz(new_encoded_header))
         # Flush the file to disk to make sure that all data is consistent
         # before we mark the file as complete.
         _flush_file(self._file)
@@ -287,7 +287,7 @@ class _ZSSDataAppender(object):
         block_contents = six.int2byte(level) + zdata
         write_uleb128(len(block_contents), self._file)
         self._file.write(block_contents)
-        self._file.write(encoded_crc32c(block_contents))
+        self._file.write(encoded_crc64xz(block_contents))
         total_block_length = self._file.tell() - block_offset
 
         if level >= len(self._level_entries):

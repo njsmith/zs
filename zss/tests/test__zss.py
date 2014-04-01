@@ -10,20 +10,13 @@ import zss
 from .._zss import *
 from nose.tools import assert_raises
 
-def test_crc32c():
-    # Some test vectors stolen from
-    #   http://rsfcode.isc.org/git/mtbl/plain/src/test-crc32c.c
+def test_crc64xz():
     for (data, result) in [
-            (b"\x61", 0xc1d04330),
-            (b"foo", 0xcfc4ae1d),
-            (b"hello world", 0xc99465aa),
-            (b"\x00" * 32, 0x8a9136aa),
-            (b"\xff" * 32, 0x62a8ab43),
-            (b"".join([chr(i) for i in xrange(1, 241)]), 0x24c5d375),
+            (b"123456789", 0x995dc9bbdf1939fa),
             ]:
         print repr(data)
-        print hex(crc32c(data))
-        assert result == crc32c(data)
+        print hex(crc64xz(data))
+        assert result == crc64xz(data)
 
 def test_buf_write_uleb128():
     cython_test_buf_write_uleb128()
