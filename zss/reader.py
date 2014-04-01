@@ -53,7 +53,7 @@ def _decode_header_data(encoded):
     f = BytesIO(encoded)
     for (field, field_format) in header_data_format:
         if field_format == "length-prefixed-utf8-json":
-            length, = read_format(f, "<I")
+            length, = read_format(f, "<Q")
             data = read_n(f, length)
             fields[field] = json.loads(data, encoding="utf-8")
         else:
@@ -175,6 +175,13 @@ class ZSS(object):
             raise ZSSCorrupt("unrecognized compression format %r"
                              % (compression,))
         self._decompress = codecs[compression][-1]
+        # Necessary to check this to meet our guarantee that we will never
+        # miss returning data that should have been returned.
+        actual_length = self._transport.length()
+        if actual_length != header["file_total_length"]:
+            raise ZSSCorrupt("file is %s bytes, but header says it should "
+                             "be %s"
+                             % (actual_length, header["file_total_length"]))
         #: The compression method used on this file, as a byte string.
         self.compression = compression
         #: This file's universally unique identifier (UUID), in the form of a

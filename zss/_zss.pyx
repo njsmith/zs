@@ -171,7 +171,8 @@ def read_uleb128(f):
          if written == 0:
             return None
          else:
-            raise zss.ZSSCorrupt("unexpected EOF while reading uleb128")
+            raise zss.ZSSCorrupt("unexpectedly ran out of data while "
+                                 "reading uleb128")
       byte_p = byte
       buf[written] = byte_p[0]
       written += 1

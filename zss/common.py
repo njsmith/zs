@@ -57,12 +57,14 @@ MAGIC = "ZSS\x1c\x8e\x6c\x00\x01"
 # This is what we stick at the beginning of a file while we constructing it in
 # the first place, before it is complete and coherent.
 INCOMPLETE_MAGIC = "SSZ\x1c\x8e\x6c\x00\x01"
-header_data_length_format = "<I"
+header_data_length_format = "<Q"
 header_data_format = [
     # The offset of the top-level index block.
     ("root_index_offset", "<Q"),
     # The length of the top-level index block.
     ("root_index_length", "<Q"),
+    # The total length of this file (necessary for detecting truncation)
+    ("file_total_length", "<Q"),
     # A unique identifier for this archive.
     ("uuid", "16s"),
     # A null-padded code for the storage algorithm used. So far:
@@ -70,7 +72,7 @@ header_data_format = [
     #   "deflate"
     #   "bzip2"
     ("compression", "16s"),
-    # "<I" giving length, then arbitrary utf8-encoded json
+    # "<Q" giving length, then arbitrary utf8-encoded json
     ("metadata", "length-prefixed-utf8-json"),
     ]
 

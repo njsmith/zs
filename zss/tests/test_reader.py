@@ -203,9 +203,12 @@ def test_big_headers():
         assert list(z) == letters_records
 
 def test_broken_files():
+    import glob
+    unchecked_paths = set(glob.glob(test_data_path("broken-files/*.zss")))
     # Files that should fail even on casual use (no validate)
     for basename, msg_fragment in [
-            ("partial-root", "partial read"),
+            ("short-root", "partial read"),
+            ("truncated-root", "unexpected EOF"),
             ("bad-magic", "bad magic"),
             ("incomplete-magic", "partially written"),
             ("header-checksum", "header checksum"),
@@ -226,6 +229,7 @@ def test_broken_files():
             ("partial-index-3", "past end of block"),
             ("partial-index-4", "past end of block"),
             ("empty-index", "empty block"),
+            ("bad-total-length", "header says it should"),
             ]:
         print(basename)
         # to prevent accidental false success:
@@ -239,6 +243,7 @@ def test_broken_files():
             with ZSS(p) as z:
                 z.validate()
         assert msg_fragment in str(cm.exception)
+        unchecked_paths.discard(p)
 
     # Files that might look okay locally, but validate should detect problems
     for basename, msg_fragment in [
@@ -263,6 +268,7 @@ def test_broken_files():
             with assert_raises(ZSSCorrupt) as cm:
                 z.validate()
         assert msg_fragment in str(cm.exception)
+        unchecked_paths.discard(p)
 
     # Files that are a bit tricky, but should in fact be okay
     for basename in [
@@ -271,6 +277,10 @@ def test_broken_files():
             "good-index-key-3",
             ]:
         print(basename)
-        with ZSS(test_data_path("broken-files/%s.zss" % (basename,))) as z:
+        p = test_data_path("broken-files/%s.zss" % (basename,))
+        with ZSS(p) as z:
             list(z)
             z.validate()
+        unchecked_paths.discard(p)
+
+    assert not unchecked_paths

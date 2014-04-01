@@ -36,7 +36,7 @@ def _encode_header(header):
     for (field, format) in header_data_format:
         if format == "length-prefixed-utf8-json":
             encoded = json.dumps(header[field], ensure_ascii=True)
-            bytes.append(struct.pack("<I", len(encoded)))
+            bytes.append(struct.pack("<Q", len(encoded)))
             bytes.append(encoded)
         else:
             bytes.append(struct.pack(format, header[field]))
@@ -46,6 +46,7 @@ def test__encode_header():
     got = _encode_header({
         "root_index_offset": 0x1234567890123456,
         "root_index_length": 0x2468864213577531,
+        "file_total_length": 0x0011223344556677,
         "uuid": b"abcdefghijklmnop",
         "compression": "superzip",
         "metadata": {"this": "is", "awesome": 10},
@@ -53,10 +54,11 @@ def test__encode_header():
     expected_metadata = b"{\"this\": \"is\", \"awesome\": 10}"
     expected = (b"\x56\x34\x12\x90\x78\x56\x34\x12"
                 b"\x31\x75\x57\x13\x42\x86\x68\x24"
+                b"\x77\x66\x55\x44\x33\x22\x11\x00"
                 b"abcdefghijklmnop"
                 b"superzip\x00\x00\x00\x00\x00\x00\x00\x00"
                 # hex(len(expected_metadata)) == 0x1d
-                b"\x1d\x00\x00\x00"
+                b"\x1d\x00\x00\x00\x00\x00\x00\x00"
                 + expected_metadata)
     assert got == expected
 
@@ -101,6 +103,7 @@ class ZSSWriter(object):
         self._header = {
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,
+            "file_total_length": 0,
             "uuid": uuid,
             "compression": self.compression,
             "metadata": self.metadata,
@@ -175,9 +178,12 @@ class ZSSWriter(object):
         sys.stderr.write("\rzss: All data written; updating header\n")
         root_index_offset, root_index_length = self._finish_queue.get()
         sys.stderr.write("zss: Root index offset: %s\n" % (root_index_offset,))
-        # Now we have the root offset; write it to the header.
+        # Now we have the root offset
         self._header["root_index_offset"] = root_index_offset
         self._header["root_index_length"] = root_index_length
+        # And can get the total file length
+        self._file.seek(0, 2)
+        self._header["file_total_length"] = self._file.tell()
         new_encoded_header = _encode_header(self._header)
         self._file.seek(len(MAGIC))
         # Read the header length and make sure it hasn't changed

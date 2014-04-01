@@ -12,44 +12,6 @@ from zss.common import *
 from zss.writer import _encode_header
 from zss._zss import write_uleb128
 
-shutil.copy("../letters-none.zss", "partial-root.zss")
-with open("partial-root.zss", "r+b") as f:
-    os.ftruncate(f.fileno(),
-                 os.stat("partial-root.zss").st_size - 1)
-
-shutil.copy("../letters-none.zss", "bad-magic.zss")
-open("bad-magic.zss", "r+b").write(b"Q")
-
-shutil.copy("../letters-none.zss", "incomplete-magic.zss")
-open("incomplete-magic.zss", "r+b").write(INCOMPLETE_MAGIC)
-
-shutil.copy("../letters-none.zss", "header-checksum.zss")
-with open("header-checksum.zss", "r+b") as f:
-    # 28 bytes places us at the beginning of the uuid field, so semantically a
-    # bunch of zeros are totally legal here.
-    f.seek(28)
-    f.write(b"\x00" * 8)
-
-shutil.copy("../letters-none.zss", "root-checksum.zss")
-with open("root-checksum.zss", "r+b") as f:
-    f.seek(-4, 2)
-    f.write(b"\x00" * 4)
-
-# partial length marker
-shutil.copy("../letters-none.zss", "truncated-data-1.zss")
-with open("truncated-data-1.zss", "ab") as f:
-    f.write(b"\x80")
-
-# partial block contents
-shutil.copy("../letters-none.zss", "truncated-data-2.zss")
-with open("truncated-data-2.zss", "ab") as f:
-    f.write(b"\x08" + b"\x00" * 7)
-
-# partial trailing checksum
-shutil.copy("../letters-none.zss", "truncated-data-3.zss")
-with open("truncated-data-3.zss", "ab") as f:
-    f.write(b"\x08" + b"\x00" * 8 + b"\x01" * 3)
-
 def _pack_index_records_unchecked(contents):
     f = BytesIO()
     for key, offset, length in zip(*contents):
@@ -69,13 +31,18 @@ def _pack_data_records_unchecked(contents):
     return f.getvalue()
 
 class SimpleWriter(object):
-    def __init__(self, p, metadata={}, codec_name="none"):
+    def __init__(self, p, metadata={}, codec_name="none", magic=MAGIC,
+                 bad_header_checksum=False):
         self.f = open(p, "w+b")
 
+        assert len(magic) == len(MAGIC)
+        self._magic = magic
+        self._bad_header_checksum = bad_header_checksum
         self.f.write(INCOMPLETE_MAGIC)
         self._header = {
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,
+            "file_total_length": 0,
             "uuid": b"\x00" * 16,
             "compression": codec_name,
             "metadata": metadata,
@@ -89,23 +56,34 @@ class SimpleWriter(object):
         self.f.write(encoded_crc32c(encoded_header))
         self._have_root = False
 
-    def raw_block(self, block_level, zdata):
+    def raw_block(self, block_level, zdata,
+                  bad_checksum=False, truncate_checksum=0):
         self.f.seek(0, 2)
         offset = self.f.tell()
         contents = int2byte(block_level) + zdata
         write_uleb128(len(contents), self.f)
         self.f.write(contents)
-        self.f.write(encoded_crc32c(contents))
+        checksum = encoded_crc32c(contents)
+        if bad_checksum:
+            checksum = b"\x00" * len(checksum)
+        if truncate_checksum > 0:
+            checksum = checksum[:-truncate_checksum]
+        self.f.write(checksum)
         block_length = self.f.tell() - offset
         return offset, block_length
 
-    def data_block(self, records):
-        zdata = _pack_data_records_unchecked(records)
-        return self.raw_block(0, zdata)
+    def append(self, garbage):
+        self.f.seek(0, 2)
+        self.f.write(garbage)
 
-    def index_block(self, block_level, records, offsets, block_lengths):
+    def data_block(self, records, **kwargs):
+        zdata = _pack_data_records_unchecked(records)
+        return self.raw_block(0, zdata, **kwargs)
+
+    def index_block(self, block_level, records, offsets, block_lengths,
+                    **kwargs):
         zdata = _pack_index_records_unchecked([records, offsets, block_lengths])
-        return self.raw_block(block_level, zdata)
+        return self.raw_block(block_level, zdata, **kwargs)
 
     def root_block(self, *args, **kwargs):
         root_offset, root_length = self.index_block(*args, **kwargs)
@@ -115,26 +93,36 @@ class SimpleWriter(object):
     def set_root(self, root_offset, root_length):
         self._header["root_index_offset"] = root_offset
         self._header["root_index_length"] = root_length
+        self._have_root = True
+
+    def close(self, header_overrides={}):
+        assert self._have_root
+        self.f.seek(0, 2)
+        self._header["file_total_length"] = self.f.tell()
+        self._header.update(header_overrides)
         encoded_header = _encode_header(self._header)
         assert len(encoded_header) == self._header_length
         self.f.seek(self._header_offset)
         self.f.write(encoded_header)
-        self.f.write(encoded_crc32c(encoded_header))
+        checksum = encoded_crc32c(encoded_header)
+        if self._bad_header_checksum:
+            checksum = b"\x00" * len(checksum)
+        self.f.write(checksum)
         self.f.seek(0)
-        self.f.write(MAGIC)
+        self.f.write(self._magic)
         self.f.flush()
-        self._have_root = True
-
-    def close(self):
-        assert self._have_root
         self.f.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if exc_type is None:
+        if exc_type is None and not self.f.closed:
             self.close()
+
+    def minimal(self):
+        o1, l1 = w.data_block(["a", "b"])
+        w.root_block(1, ["a"], [o1], [l1])
 
 with SimpleWriter("bad-data-order.zss") as w:
     offset, length = w.data_block(["z", "a"])
@@ -246,16 +234,14 @@ with SimpleWriter("unref-data.zss") as w:
     w.root_block(1, ["a"], [o1], [l1])
 
 with SimpleWriter("non-dict-metadata.zss", metadata="hi!") as w:
-    o1, l1 = w.data_block(["a", "b"])
-    w.root_block(1, ["a"], [o1], [l1])
+    w.minimal()
 
 with SimpleWriter("root-is-data.zss") as w:
     o1, l1 = w.data_block(["a", "b"])
     w.set_root(o1, l1)
 
 with SimpleWriter("bad-codec.zss", codec_name="XXX-bad-codec-XXX") as w:
-    o1, l1 = w.data_block(["a", "b"])
-    w.root_block(1, ["a"], [o1], [l1])
+    w.minimal()
 
 # cut off in the middle of a record
 with SimpleWriter("partial-data-1.zss") as w:
@@ -290,3 +276,48 @@ with SimpleWriter("partial-index-4.zss") as w:
 with SimpleWriter("empty-index.zss") as w:
     w.data_block(["a", "b"])
     w.set_root(*w.raw_block(1, b""))
+
+with SimpleWriter("bad-total-length.zss") as w:
+    w.minimal()
+    w.close({"file_total_length": 10 ** 10})
+
+with SimpleWriter("bad-magic.zss", magic=b"Q" * 8) as w:
+    w.minimal()
+
+with SimpleWriter("incomplete-magic.zss", magic=INCOMPLETE_MAGIC) as w:
+    w.minimal()
+
+with SimpleWriter("root-checksum.zss") as w:
+    o1, l1 = w.data_block(["a", "b"])
+    w.root_block(1, ["a"], [o1], [l1], bad_checksum=True)
+
+with SimpleWriter("header-checksum.zss", bad_header_checksum=True) as w:
+    w.minimal()
+
+# file_total_length header field is correct, but root_index_length points past
+# end of file.
+with SimpleWriter("short-root.zss") as w:
+    o1, l1 = w.data_block(["a", "b"])
+    ro, rl = w.index_block(1, ["a"], [o1], [l1])
+    w.set_root(ro, rl + 1)
+
+# file_total_length and root_index_length correctly point to a block that has
+# been truncated before being written.
+with SimpleWriter("truncated-root.zss") as w:
+    o1, l1 = w.data_block(["a", "b"])
+    w.root_block(1, ["a"], [o1], [l1], truncate_checksum=1)
+
+with SimpleWriter("truncated-data-1.zss") as w:
+    w.minimal()
+    # partial length marker for another block
+    w.append(b"\x80")
+
+with SimpleWriter("truncated-data-2.zss") as w:
+    w.minimal()
+    # partial block contents for another block
+    w.append(b"\x08" + b"\x00" * 7)
+
+with SimpleWriter("truncated-data-3.zss") as w:
+    w.minimal()
+    # partial trailing checksum
+    w.append(b"\x08" + b"\x00" * 8 + b"\x01" * 2)

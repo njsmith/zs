@@ -36,6 +36,10 @@ class FileTransport(object):
         new_file.seek(offset)
         return new_file
 
+    def length(self):
+        stat = os.fstat(self._file.fileno())
+        return stat.st_size
+
     def close(self):
         self._file.close()
 
@@ -45,15 +49,16 @@ class HTTPTransport(object):
     def __init__(self, url):
         self._url = url
         self.name = url
+        self._length = None
 
-    _crange_re = re.compile(r"^bytes (\d+)-")
+    _crange_re = re.compile(r"^bytes (\d+)-\d+/(\d+|\*)")
     def _check_offset(self, response, desired_offset):
         # http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.16
         # Content-Range tells you what data you actually got, and looks like:
         #   "bytes X-Y/Z"
         # or
         #   "bytes */Z"
-        # where X & Y are integers, and Z is either an integers or "*"
+        # where X & Y are integers, and Z is either an integer or "*"
         # The second form is only allowed on error responses.
         crange = response.headers.get("Content-Range", "")
         match = self._crange_re.match(crange)
@@ -63,6 +68,8 @@ class HTTPTransport(object):
             offset = int(match.group(1))
         if offset != desired_offset:
             raise ZSSError("HTTP server did not respect Range: request")
+        if match and match.group(2) != "*":
+            self._length = int(match.group(2))
 
     def chunk_read(self, offset, length):
         # -1 because Range: is inclusive
@@ -88,6 +95,12 @@ class HTTPTransport(object):
         response.raise_for_status()
         self._check_offset(response, offset)
         return _HTTPStream(offset, response)
+
+    def length(self):
+        if self._length is None:
+            response = requests.head(self._url)
+            self._length = response.headers["Content-Length"]
+        return self._length
 
     def close(self):
         pass
