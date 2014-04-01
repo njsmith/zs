@@ -215,7 +215,7 @@ def test_broken_files():
             ("root-checksum", "checksum mismatch"),
             ("bad-codec", "unrecognized compression"),
             ("non-dict-metadata", "bad metadata"),
-            ("truncated-data-1", "unexpected EOF"),
+            ("truncated-data-1", "unexpectedly ran out of data"),
             ("truncated-data-2", "unexpected EOF"),
             ("truncated-data-3", "unexpected EOF"),
             ("wrong-root-offset", "checksum mismatch"),
