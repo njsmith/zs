@@ -218,7 +218,7 @@ cdef bytes _pack_records(list records,
                     raise zss.ZSSError("records are not sorted: %r > %r"
                                        % (records[i - 1], records[i]))
             new_bufsize = bufsize
-            while (new_bufsize - written) < (2 * _MAX_ULEB128_LENGTH
+            while (new_bufsize - written) < (3 * _MAX_ULEB128_LENGTH
                                              + c_length
                                              # in case of off-by-one errors:
                                              + 10):
