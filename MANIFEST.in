@@ -1,5 +1,5 @@
 include DEV-NOTES LICENSE.txt README.rst
-include zss/pycrc-crc32c.h zss/pycrc-crc32c.c
+include zss/pycrc-crc64xz.h zss/pycrc-crc64xz.c
 recursive-include doc *
 recursive-include zss/tests/data *
 prune doc/_build
