@@ -4,6 +4,7 @@
 
 import os
 import os.path
+import hashlib
 
 from six import int2byte, byte2int, BytesIO
 from nose.tools import assert_raises
@@ -12,6 +13,7 @@ from .util import test_data_path
 from .http_harness import web_server
 from zss import ZSS, ZSSError, ZSSCorrupt
 import zss.common
+from zss._zss import pack_data_records
 
 # letters.zss contains records:
 #   [b, bb, d, dd, f, ff, ..., z, zz]
@@ -19,6 +21,8 @@ letters_records = []
 for i in xrange(1, 26, 2):
     letter = int2byte(byte2int(b"a") + i)
     letters_records += [letter, 2 * letter]
+
+letters_sha256 = hashlib.sha256(pack_data_records(letters_records, 1)).digest()
 
 def _check_map_helper(records, arg1, arg2):
     assert arg1 == 1
@@ -30,8 +34,7 @@ def _check_raise_helper(records, exc):
 
 def check_letters_zss(z, codec):
     assert z.compression == codec
-    assert z.uuid == (b"\x00\x01\x02\x03\x04\x05\x06\x07"
-                      b"\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f")
+    assert z.data_sha256 == letters_sha256
     assert z.metadata == {
         u"test-data": u"letters",
         u"build-user": u"test-user",
@@ -192,8 +195,7 @@ def test_big_headers():
     with _lower_header_size_guess():
         z = ZSS(test_data_path("letters-none.zss"))
         assert z.compression == "none"
-        assert z.uuid == (b"\x00\x01\x02\x03\x04\x05\x06\x07"
-                          b"\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f")
+        assert z.data_sha256 == letters_sha256
         assert z.metadata == {
             u"test-data": u"letters",
             u"build-user": u"test-user",
@@ -259,6 +261,7 @@ def test_broken_files():
             ("bad-index-key-1", "too large for block"),
             ("bad-index-key-2", "too small for block"),
             ("bad-index-key-3", "too small for block"),
+            ("bad-sha256", "data hash mismatch"),
             ]:
         print(basename)
         # to prevent accidental false success:

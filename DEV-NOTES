@@ -7,8 +7,5 @@ ZSS_QUICK_TEST=1 nosetests --all-modules zss
 nosetests --all-modules --with-cov --cov-conf .coveragerc --cov-report term-missing --cov-report html zss
 
 * Next
-** replace UUID with sha256 of whole contents
-
-** generate letters files on the fly
 ** add a test to writer that just writes, checks metadata, checks contents, and calls fsck()
 ** docs

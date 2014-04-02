@@ -67,8 +67,8 @@ header_data_format = [
     ("root_index_length", "<Q"),
     # The total length of this file (necessary for detecting truncation)
     ("file_total_length", "<Q"),
-    # A unique identifier for this archive.
-    ("uuid", "16s"),
+    # sha256(concat(all data blocks)), to let us uniquely identify archives
+    ("sha256", "32s"),
     # A null-padded code for the storage algorithm used. So far:
     #   "none"
     #   "deflate"

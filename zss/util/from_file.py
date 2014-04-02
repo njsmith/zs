@@ -40,8 +40,6 @@ def main(progname, args):
     parser.add_argument("--compress-level", type=int,
                         help="Compress level (1-9) "
                              "(default: 6 for zlib, 9 for bz2)")
-    parser.add_argument("--uuid", default="autogenerate",
-                        help="16 bytes of hex-encoded unique data")
     parser.add_argument("--metadata", metavar="JSON-STRING")
     parser.add_argument("--no-spinner", action="store_true",
                         dest="hide_spinner", default=False,
@@ -54,16 +52,11 @@ def main(progname, args):
     if args.compress_level is not None:
         compress_kwargs["compress_level"] = args.compress_level
     sys.stderr.write("zss: Setting up writer\n")
-    if args.uuid == "autogenerate":
-        uuid = None
-    else:
-        uuid = binascii.unhexlify(args.uuid)
     writer = zss.ZSSWriter(args.output_zss, metadata,
                            args.branching_factor, args.approx_block_size,
                            args.parallelism,
                            compression=args.compression,
                            compress_kwargs=compress_kwargs,
-                           uuid=uuid,
                            show_spinner=not args.hide_spinner)
     sys.stderr.write("zss: Reading input\n")
     writer.from_file(open(args.input, "rb"), terminator=terminator)

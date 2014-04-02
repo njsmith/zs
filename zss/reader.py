@@ -11,6 +11,8 @@ from collections import namedtuple
 import multiprocessing
 import threading
 import weakref
+import hashlib
+import binascii
 
 from six import Iterator, BytesIO, byte2int, int2byte, reraise
 from six.moves import queue
@@ -184,9 +186,13 @@ class ZSS(object):
                              % (actual_length, header["file_total_length"]))
         #: The compression method used on this file, as a byte string.
         self.compression = compression
-        #: This file's universally unique identifier (UUID), in the form of a
-        #: 16-byte byte string.
-        self.uuid = header["uuid"]
+        #: A strong hash of the underlying data records contained in this
+        #: file. If two files have the same value here, then they are
+        #: guaranteed to represent exactly the same data (i.e., return the
+        #: same records to the same queries), though they might be stored
+        #: using different compression algorithms, have different metadata,
+        #: etc.
+        self.data_sha256 = header["sha256"]
         #: A .zss file can contain arbitrary metadata in the form of a
         #: JSON-encoded dictionary. This attribute contains this metadata in
         #: unpacked form.
@@ -624,6 +630,8 @@ class ZSS(object):
         def add_fail(offset, msg):
             failures.append((offset, msg))
 
+        hasher = hashlib.sha256()
+
         UnrefBlock = namedtuple("UnrefBlock",
                                 ["block_level", "first_record",
                                  "last_record", "block_length"])
@@ -674,6 +682,7 @@ class ZSS(object):
                          _validate_helper, self._decompress)) as it:
             for offset, block_length, block_level, data in it:
                 if block_level == 0:
+                    hasher.update(data)
                     records = unpack_data_records(data)
                 else:
                     (records, offsets, block_lengths
@@ -703,6 +712,11 @@ class ZSS(object):
 
         for offset in unref_blocks_by_offset:
             add_fail(offset, "unreferenced block")
+
+        if hasher.digest() != self.data_sha256:
+            add_fail(0, "data hash mismatch: header says %s, but I found %s"
+                     % (binascii.hexlify(self.data_sha256),
+                        binascii.hexlify(hasher.digest())))
 
         if failures:
             failure_strs = ["offset %s: %s" % (offset, msg)

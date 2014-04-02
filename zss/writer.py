@@ -3,7 +3,7 @@
 # See file LICENSE.txt for license information.
 
 import json
-from uuid import uuid4
+import hashlib
 import os
 import os.path
 import multiprocessing
@@ -47,7 +47,7 @@ def test__encode_header():
         "root_index_offset": 0x1234567890123456,
         "root_index_length": 0x2468864213577531,
         "file_total_length": 0x0011223344556677,
-        "uuid": b"abcdefghijklmnop",
+        "sha256": b"abcdefghijklmnopqrstuvwxyz012345",
         "compression": "superzip",
         "metadata": {"this": "is", "awesome": 10},
         })
@@ -55,7 +55,7 @@ def test__encode_header():
     expected = (b"\x56\x34\x12\x90\x78\x56\x34\x12"
                 b"\x31\x75\x57\x13\x42\x86\x68\x24"
                 b"\x77\x66\x55\x44\x33\x22\x11\x00"
-                b"abcdefghijklmnop"
+                b"abcdefghijklmnopqrstuvwxyz012345"
                 b"superzip\x00\x00\x00\x00\x00\x00\x00\x00"
                 # hex(len(expected_metadata)) == 0x1d
                 b"\x1d\x00\x00\x00\x00\x00\x00\x00"
@@ -104,7 +104,7 @@ class ZSSWriter(object):
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,
             "file_total_length": 0,
-            "uuid": uuid,
+            "sha256": b"\x00" * 32,
             "compression": self.compression,
             "metadata": self.metadata,
             }
@@ -176,11 +176,12 @@ class ZSSWriter(object):
         self._write_queue.put(_QUIT)
         self._writer.join()
         sys.stderr.write("\rzss: All data written; updating header\n")
-        root_index_offset, root_index_length = self._finish_queue.get()
+        root_index_offset, root_index_length, sha256 = self._finish_queue.get()
         sys.stderr.write("zss: Root index offset: %s\n" % (root_index_offset,))
         # Now we have the root offset
         self._header["root_index_offset"] = root_index_offset
         self._header["root_index_length"] = root_index_length
+        self._header["sha256"] = sha256
         # And can get the total file length
         self._file.seek(0, 2)
         self._header["file_total_length"] = self._file.tell()
@@ -227,7 +228,7 @@ def _compress_worker(approx_block_size, compress_fn, compress_kwargs,
         data = pdr(records, 2 * approx_block_size)
         zdata = compress_fn(data, **compress_kwargs)
         #sys.stderr.write("compress_worker: putting\n")
-        put((idx, records[0], records[-1], zdata))
+        put((idx, records[0], records[-1], data, zdata))
 
 def _write_worker(path, branching_factor,
                   compress_fn, compress_kwargs,
@@ -244,8 +245,8 @@ def _write_worker(path, branching_factor,
         #sys.stderr.write("write_worker: got\n")
         if job is _QUIT:
             assert not pending_jobs
-            root_offset, root_len = data_appender.close_and_get_root_offset()
-            finish_queue.put((root_offset, root_len))
+            header_info = data_appender.close_and_get_header_info()
+            finish_queue.put(header_info)
             return
         pending_jobs[job[0]] = job[1:]
         while wanted_job in pending_jobs:
@@ -278,10 +279,14 @@ class _ZSSDataAppender(object):
         # them to find shorter keys (XX).
         self._level_entries = []
         self._level_lengths = []
+        self._hasher = hashlib.sha256()
 
-    def write_block(self, level, first_record, last_record, zdata):
+    def write_block(self, level, first_record, last_record, data, zdata):
         if not (0 <= level <= MAX_LEVEL):
             raise ZSSError("invalid level %s" % (level,))
+
+        if level == 0:
+            self._hasher.update(data)
 
         block_offset = self._file.tell()
         block_contents = six.int2byte(level) + zdata
@@ -321,9 +326,9 @@ class _ZSSDataAppender(object):
         zdata = self._compress_fn(data, **self._compress_kwargs)
         first_record = entries[0][0]
         last_record = entries[-1][1]
-        self.write_block(level + 1, first_record, last_record, zdata)
+        self.write_block(level + 1, first_record, last_record, data, zdata)
 
-    def close_and_get_root_offset(self):
+    def close_and_get_header_info(self):
         # We need to create index blocks referring to all dangling
         # unreferenced blocks. If at any point we have only a single
         # unreferenced index block, then this is our root index.
@@ -354,5 +359,5 @@ class _ZSSDataAppender(object):
         _flush_file(self._file)
         self._file.close()
         root_entry = self._level_entries[-1][0]
-        return root_entry[-2:]
+        return root_entry[-2:] + (self._hasher.digest(),)
         assert False

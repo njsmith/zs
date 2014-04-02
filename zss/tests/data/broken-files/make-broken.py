@@ -6,6 +6,7 @@
 
 import os
 import shutil
+import hashlib
 from six import BytesIO, int2byte, byte2int
 import zss
 from zss.common import *
@@ -35,6 +36,7 @@ class SimpleWriter(object):
                  bad_header_checksum=False):
         self.f = open(p, "w+b")
 
+        self.hasher = hashlib.sha256()
         assert len(magic) == len(MAGIC)
         self._magic = magic
         self._bad_header_checksum = bad_header_checksum
@@ -43,7 +45,7 @@ class SimpleWriter(object):
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,
             "file_total_length": 0,
-            "uuid": b"\x00" * 16,
+            "sha256": b"\x00" * 32,
             "compression": codec_name,
             "metadata": metadata,
             }
@@ -78,6 +80,7 @@ class SimpleWriter(object):
 
     def data_block(self, records, **kwargs):
         zdata = _pack_data_records_unchecked(records)
+        self.hasher.update(zdata)
         return self.raw_block(0, zdata, **kwargs)
 
     def index_block(self, block_level, records, offsets, block_lengths,
@@ -99,6 +102,7 @@ class SimpleWriter(object):
         assert self._have_root
         self.f.seek(0, 2)
         self._header["file_total_length"] = self.f.tell()
+        self._header["sha256"] = self.hasher.digest()
         self._header.update(header_overrides)
         encoded_header = _encode_header(self._header)
         assert len(encoded_header) == self._header_length
@@ -280,6 +284,10 @@ with SimpleWriter("empty-index.zss") as w:
 with SimpleWriter("bad-total-length.zss") as w:
     w.minimal()
     w.close({"file_total_length": 10 ** 10})
+
+with SimpleWriter("bad-sha256.zss") as w:
+    w.minimal()
+    w.close({"sha256": b"\x00" * 32})
 
 with SimpleWriter("bad-magic.zss", magic=b"Q" * 8) as w:
     w.minimal()
