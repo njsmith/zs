@@ -69,7 +69,7 @@ class _QUIT(object):
 class ZSSWriter(object):
     def __init__(self, path, metadata, branching_factor, approx_block_size,
                  parallelism, compression="bz2", compress_kwargs={},
-                 uuid=None, show_spinner=True, include_auto_metadata=True):
+                 show_spinner=True, include_auto_metadata=True):
         self._path = path
         # Technically there is a race condition here, but oh well. This is
         # just a safety/sanity check; it's not worth going through the
@@ -93,13 +93,6 @@ class ZSSWriter(object):
                            % (compression, ", ".join(codecs)))
         self._compress_fn = codecs[self.compression][0]
         self._compress_kwargs = compress_kwargs
-        if uuid is None:
-            uuid = uuid4().bytes
-        if not isinstance(uuid, six.binary_type):
-            raise TypeError("uuid= must be str (on py2) or bytes (on py3)")
-        if len(uuid) != 16:
-            raise ValueError("uuid (if given) must be exactly 16 bytes")
-        self.uuid = uuid
         self._header = {
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,

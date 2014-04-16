@@ -33,7 +33,6 @@ def do_write(codec, branching_factor, approx_block_size):
               approx_block_size=approx_block_size,
               parallelism=2,
               compression=codec,
-              uuid=binascii.unhexlify(b"000102030405060708090a0b0c0d0e0f"),
               ).from_file(letters_file())
 
 # Some variation in branching factor and block size increases the diversity of
