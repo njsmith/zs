@@ -4,6 +4,7 @@
 
 import os
 import os.path
+import sys
 import hashlib
 
 from six import int2byte, byte2int, BytesIO
@@ -233,7 +234,7 @@ def test_broken_files():
             ("empty-index", "empty block"),
             ("bad-total-length", "header says it should"),
             ("bad-level-root", "extension block"),
-            ("bad-level-index", "extension block"),
+            ("bad-level-index-2", "extension block"),
             ]:
         print(basename)
         # to prevent accidental false success:
@@ -264,6 +265,15 @@ def test_broken_files():
             ("bad-index-key-2", "too small for block"),
             ("bad-index-key-3", "too small for block"),
             ("bad-sha256", "data hash mismatch"),
+            # not really an accurate message -- this file has a level 1 index
+            # pointing to an extension block. the reader doesn't blow up at
+            # this because it knows that below a level 1 index is data and
+            # switches to streaming read, and then streaming read ignores
+            # extension blocks, so only fsck() will catch it. And fsck() uses
+            # a streaming read so extension blocks are invisible to it, and
+            # all it sees is that there's this reference pointing into an
+            # invisible hole in space, which looks like a dangling reference.
+            ("bad-level-index-1", "dangling"),
             ]:
         print(basename)
         # to prevent accidental false success:
@@ -300,8 +310,14 @@ def test_extension_blocks():
 
 def test_ref_loops():
     # Had a bunch of trouble eliminating reference loops in the ZSS object.
-    with ZSS(test_data_path("letters-none.zss")) as z:
-        # 1 for 'z', one for the temporary psased to sys.getrefcount
+    # Don't use 'with' statement here b/c that keeps another ref which just
+    # confuses things.
+    z = ZSS(test_data_path("letters-none.zss"))
+    try:
+        # 1 for 'z', one for the temporary passed to sys.getrefcount
+        print sys.getrefcount(z)
         assert sys.getrefcount(z) == 2
         list(z)
         assert sys.getrefcount(z) == 2
+    finally:
+        z.close()

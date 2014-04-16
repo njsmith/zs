@@ -338,11 +338,15 @@ with SimpleWriter("bad-level-root.zss") as w:
         o, l = w.index_block(i, ["a"], [o], [l])
     w.set_root(o, l)
 
-with SimpleWriter("bad-level-index.zss") as w:
-    o, l = w.index_block(65, ["a"], [0], [0])
+with SimpleWriter("bad-level-index-1.zss") as w:
+    o, l = w.index_block(64, ["a"], [0], [0])
     w.root_block(1, ["a"], [o], [l])
 
-# Random extension blocks in the middle of the file are ignord though
+with SimpleWriter("bad-level-index-2.zss") as w:
+    o, l = w.index_block(64, ["a"], [0], [0])
+    w.root_block(2, ["a"], [o], [l])
+
+# Random extension blocks in the middle of the file are ignored though
 with SimpleWriter("good-extension-blocks.zss") as w:
     o1, l1 = w.data_block(["a", "b"])
     for i in xrange(64, 256):
