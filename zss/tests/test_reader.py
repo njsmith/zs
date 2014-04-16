@@ -13,8 +13,8 @@ from nose.tools import assert_raises
 from .util import test_data_path
 from .http_harness import web_server
 from zss import ZSS, ZSSError, ZSSCorrupt
-import zss.common
 from zss._zss import pack_data_records
+from zss.common import read_length_prefixed, codecs
 
 # letters.zss contains records:
 #   [b, bb, d, dd, f, ff, ..., z, zz]
@@ -23,7 +23,7 @@ for i in xrange(1, 26, 2):
     letter = int2byte(byte2int(b"a") + i)
     letters_records += [letter, 2 * letter]
 
-letters_sha256 = hashlib.sha256(pack_data_records(letters_records, 1)).digest()
+letters_sha256 = hashlib.sha256(pack_data_records(letters_records)).digest()
 
 def _check_map_helper(records, arg1, arg2):
     assert arg1 == 1
@@ -110,6 +110,16 @@ def check_letters_zss(z, codec):
                 z.dump(out, start=start, stop=stop, prefix=prefix,
                        terminator=term)
                 assert out.getvalue() == expected_dump
+            out = BytesIO()
+            z.dump(out, start=start, stop=stop, prefix=prefix,
+                   length_prefixed="uleb128")
+            assert (list(read_length_prefixed(BytesIO(out.getvalue()), "uleb128"))
+                    == expected)
+            out = BytesIO()
+            z.dump(out, start=start, stop=stop, prefix=prefix,
+                   length_prefixed="u64le")
+            assert (list(read_length_prefixed(BytesIO(out.getvalue()), "u64le"))
+                    == expected)
 
     assert list(z.search(stop=b"bb", prefix=b"b")) == [b"b"]
 
@@ -121,7 +131,7 @@ def check_letters_zss(z, codec):
     z.validate()
 
 def test_zss():
-    for codec in zss.common.codecs:
+    for codec in codecs:
         p = test_data_path("letters-%s.zss" % (codec,))
         for parallelism in [0, 2, "auto"]:
             with ZSS(path=p, parallelism=parallelism) as z:

@@ -188,11 +188,11 @@ def read_uleb128(f):
 
 ################################################################
 
-def pack_data_records(list records, size_t alloc_hint):
+def pack_data_records(list records, size_t alloc_hint=65536):
     return _pack_records(records, None, None, alloc_hint)
 
 def pack_index_records(list records, list offsets, list lengths,
-                       size_t alloc_hint):
+                       size_t alloc_hint=65536):
     return _pack_records(records, offsets, lengths, alloc_hint)
 
 cdef bytes _pack_records(list records,

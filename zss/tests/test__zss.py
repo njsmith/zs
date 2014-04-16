@@ -50,6 +50,7 @@ def test_data_records():
     expected = b"\x00\x10" + b"\x00" * 16 + b"\x01a\x01b"
     for alloc_hint in [1, 5, 100]:
         assert pack_data_records(records, alloc_hint) == expected
+    assert pack_data_records(records) == expected
     assert unpack_data_records(expected) == records
     # Second record extends past end of block
     assert_raises(zss.ZSSCorrupt,
@@ -75,6 +76,7 @@ def test_index_records():
         print("asdf")
         assert pack_index_records(records, offsets, block_lengths, alloc_hint
             ) == expected
+    assert pack_index_records(records, offsets, block_lengths) == expected
     assert unpack_index_records(expected) == (records, offsets, block_lengths)
     # Second record extends past end of block
     print("a")

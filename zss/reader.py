@@ -30,7 +30,8 @@ from .common import (ZSSError,
                      codecs,
                      read_n,
                      read_format)
-from ._zss import unpack_data_records, unpack_index_records, read_uleb128
+from ._zss import (unpack_data_records, unpack_index_records, read_uleb128,
+                   pack_data_records)
 from .transport import FileTransport, HTTPTransport
 
 # How much data to read from the header on our first request on slow
@@ -121,13 +122,25 @@ def _sloppy_block_map_helper(offset, block_length, block_level, zdata,
         raise _ZSSMapStop()
     return user_fn(records, *user_args, **user_kwargs)
 
-def _dump_helper(records, start, stop, terminator):
+def _dump_helper(records, start, stop, terminator, length_prefixed):
     if records[0] < start:
         records = records[bisect_left(records, start):]
     if stop is not None and records and records[-1] >= stop:
         records = records[:bisect_left(records, stop)]
-    records.append(b"")
-    return terminator.join(records)
+    if length_prefixed == "uleb128":
+        return pack_data_records(records)
+    elif length_prefixed == "u64le":
+        out = BytesIO()
+        for record in records:
+            out.write(struct.pack("<Q", len(record)))
+            out.write(record)
+        return out.getvalue()
+    elif length_prefixed is None:
+        records.append(b"")
+        return terminator.join(records)
+    else:
+        raise ValueError("invalid length_prefixed argument: must be "
+                         "'uleb128', 'u64le', or None")
 
 def _validate_helper(offset, block_length, block_level, zdata, stop,
                  decompress_fn):
@@ -646,12 +659,16 @@ class ZSS(object):
         return self.search()
 
     def dump(self, out_file, start=None, stop=None, prefix=None,
-             terminator=b"\n"):
+             terminator=b"\n", length_prefixed=None):
         """Decompress a given range of the .zss file to another file. This is
         performed in the most efficient available way.
 
         :arg terminator: A byte string containing a terminator appended to the
           end of each record. Default is a newline.
+
+        :arg length_prefixed: If given, records are output in a
+          length-prefixed format, and ``terminator`` is ignored. Valid values
+          are the strings ``"uleb128"`` or ``"u64le"``, or None.
 
         See :meth:`search` for the definition of ``start``, ``stop``, and
         ``prefix``.
@@ -664,7 +681,7 @@ class ZSS(object):
         sbm = self.sloppy_block_map
         with closing(sbm(_dump_helper,
                          start=start, stop=stop,
-                         args=(start, stop, terminator))) as it:
+                         args=(start, stop, terminator, length_prefixed))) as it:
             out_file.writelines(it)
 
     def validate(self):

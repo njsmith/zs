@@ -134,3 +134,57 @@ def read_format(f, struct_format):
     length = struct.calcsize(struct_format)
     data = read_n(f, length)
     return struct.unpack(struct_format, data)
+
+def read_u64le(f):
+    """Read a u64le from file-like object 'f'.
+
+    Returns value, or else None if 'f' is at EOF."""
+    encoded_value = f.read(8)
+    if not encoded_value:
+        return None
+    elif len(encoded_value) != 8:
+        raise ValueError("file ended in middle of a u64le")
+    else:
+        return struct.unpack("<Q", encoded_value)[0]
+
+def read_length_prefixed(f, mode):
+    if mode == "u64le":
+        get_length = read_u64le
+    elif mode == "uleb128":
+        get_length = zss._zss.read_uleb128
+    else:
+        raise ValueError("length-prefix mode must be u64le or uleb128")
+    while True:
+        length = get_length(f)
+        print length
+        if length is None:
+            return
+        record = f.read(length)
+        print record
+        if len(record) != length:
+            raise ValueError("%s length-prefixed file ended mid-record"
+                             % (mode,))
+        yield record
+
+def test_read_length_prefixed():
+    from six import BytesIO
+    f = BytesIO(b"\x00\x00\x00\x00\x00\x00\x00\x00"
+                b"\x01\x00\x00\x00\x00\x00\x00\x00a"
+                b"\x02\x00\x00\x00\x00\x00\x00\x00bb")
+    got = list(read_length_prefixed(f, "u64le"))
+    assert got == [b"", b"a", b"bb"]
+    from nose.tools import assert_raises
+    assert_raises(ValueError, list,
+                  read_length_prefixed(BytesIO("b\x00"), "u64le"))
+    assert_raises(ValueError, list,
+                  read_length_prefixed(
+                      BytesIO("b\x02\x00\x00\x00\x00\x00\x00\x00a"), "u64le"))
+
+    assert (list(read_length_prefixed(
+        BytesIO(b"\x00"
+                b"\x01a"
+                b"\x02bb"
+                b"\x80\x01" + (b"c" * 0x80)), "uleb128"))
+            == [b"", b"a", b"bb", b"c" * 0x80])
+    assert_raises(ValueError, list,
+                  read_length_prefixed(BytesIO("b\x02a"), "uleb128"))
