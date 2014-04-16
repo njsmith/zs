@@ -1,8 +1,8 @@
+#!/usr/bin/env python
+
 # This file is part of ZSS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
-
-#!/usr/bin/env python
 
 import os
 import shutil
@@ -33,7 +33,7 @@ def _pack_data_records_unchecked(contents):
 
 class SimpleWriter(object):
     def __init__(self, p, metadata={}, codec_name="none", magic=MAGIC,
-                 bad_header_checksum=False):
+                 bad_header_checksum=False, header_extra=""):
         self.f = open(p, "w+b")
 
         self.hasher = hashlib.sha256()
@@ -49,7 +49,8 @@ class SimpleWriter(object):
             "compression": codec_name,
             "metadata": metadata,
             }
-        encoded_header = _encode_header(self._header)
+        self._header_extra = header_extra
+        encoded_header = _encode_header(self._header) + self._header_extra
         self._header_length = len(encoded_header)
         self.f.write(struct.pack(header_data_length_format,
                                  len(encoded_header)))
@@ -104,7 +105,7 @@ class SimpleWriter(object):
         self._header["file_total_length"] = self.f.tell()
         self._header["sha256"] = self.hasher.digest()
         self._header.update(header_overrides)
-        encoded_header = _encode_header(self._header)
+        encoded_header = _encode_header(self._header) + self._header_extra
         assert len(encoded_header) == self._header_length
         self.f.seek(self._header_offset)
         self.f.write(encoded_header)
@@ -329,3 +330,28 @@ with SimpleWriter("truncated-data-3.zss") as w:
     w.minimal()
     # partial trailing checksum
     w.append(b"\x08" + b"\x00" * 8 + b"\x01" * 2)
+
+# Index blocks can't have level >= 64
+with SimpleWriter("bad-level-root.zss") as w:
+    o, l = w.data_block(["a", "b"])
+    for i in xrange(1, 65):
+        o, l = w.index_block(i, ["a"], [o], [l])
+    w.set_root(o, l)
+
+with SimpleWriter("bad-level-index.zss") as w:
+    o, l = w.index_block(65, ["a"], [0], [0])
+    w.root_block(1, ["a"], [o], [l])
+
+# Random extension blocks in the middle of the file are ignord though
+with SimpleWriter("good-extension-blocks.zss") as w:
+    o1, l1 = w.data_block(["a", "b"])
+    for i in xrange(64, 256):
+        # Not really an index block, but this is the quickest way to write
+        # some gibberish with a high level to the file
+        w.index_block(i, ["asdf"], [0], [0])
+    o2, l2 = w.data_block(["c", "d"])
+    w.root_block(1, ["a", "c"], [o1, o2], [l1, l2])
+
+with SimpleWriter("good-extension-header-fields.zss",
+                  header_extra=b"0123456789") as w:
+    w.minimal()

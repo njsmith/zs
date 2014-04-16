@@ -232,6 +232,8 @@ def test_broken_files():
             ("partial-index-4", "past end of block"),
             ("empty-index", "empty block"),
             ("bad-total-length", "header says it should"),
+            ("bad-level-root", "extension block"),
+            ("bad-level-index", "extension block"),
             ]:
         print(basename)
         # to prevent accidental false success:
@@ -278,6 +280,8 @@ def test_broken_files():
             "good-index-key-1",
             "good-index-key-2",
             "good-index-key-3",
+            "good-extension-blocks",
+            "good-extension-header-fields",
             ]:
         print(basename)
         p = test_data_path("broken-files/%s.zss" % (basename,))
@@ -287,3 +291,17 @@ def test_broken_files():
         unchecked_paths.discard(p)
 
     assert not unchecked_paths
+
+def test_extension_blocks():
+    # Check that the reader happily skips over the extension blocks in the
+    # middle of the file.
+    with ZSS(test_data_path("broken-files/good-extension-blocks.zss")) as z:
+        assert list(z) == ["a", "b", "c", "d"]
+
+def test_ref_loops():
+    # Had a bunch of trouble eliminating reference loops in the ZSS object.
+    with ZSS(test_data_path("letters-none.zss")) as z:
+        # 1 for 'z', one for the temporary psased to sys.getrefcount
+        assert sys.getrefcount(z) == 2
+        list(z)
+        assert sys.getrefcount(z) == 2

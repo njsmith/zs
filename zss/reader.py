@@ -7,7 +7,7 @@ import struct
 import json
 from bisect import bisect_left
 from contextlib import closing, contextmanager
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 import multiprocessing
 import threading
 import weakref
@@ -22,6 +22,7 @@ from .common import (ZSSError,
                      ZSSCorrupt,
                      MAGIC,
                      INCOMPLETE_MAGIC,
+                     MAX_LEVEL,
                      encoded_crc64xz,
                      CRC_LENGTH,
                      header_data_length_format,
@@ -30,7 +31,6 @@ from .common import (ZSSError,
                      read_n,
                      read_format)
 from ._zss import unpack_data_records, unpack_index_records, read_uleb128
-from .lru import LRU
 from .transport import FileTransport, HTTPTransport
 
 # How much data to read from the header on our first request on slow
@@ -103,6 +103,8 @@ def _map_raw_helper(offset, block_length, raw_block, checksum,
     block_level, zdata = _check_block(offset, raw_block, checksum)
     if skip_index and block_level > 0:
         return _ZSS_MAP_SKIP
+    if block_level > MAX_LEVEL:
+        return _ZSS_MAP_SKIP
     return fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
 
 def _decompress_helper(offset, block_length,
@@ -130,6 +132,52 @@ def _dump_helper(records, start, stop, terminator):
 def _validate_helper(offset, block_length, block_level, zdata, stop,
                  decompress_fn):
     return (offset, block_length, block_level, decompress_fn(zdata))
+
+# A simple LRU cache. This has a somewhat awkward API because we don't want it
+# to ever hold a reference to the ZSS object, because that would create a
+# reference loop. And in particular, this means that it can't hold a reference
+# to the bound method that's being cached, so we have to pass that in on every
+# use.
+class _LRU(object):
+    def __init__(self, max_size):
+        self._max_size = max_size
+        self._data = OrderedDict()
+
+    # Notice that *only* 'args' is used as a key for the cache -- you must
+    # always pass the same 'fn' when calling this method.
+    def lru_call(self, fn, *args):
+        if args in self._data:
+            # remove item so that reinserting it will move it to the end
+            value = self._data.pop(args)
+        else:
+            value = fn(*args)
+        self._data[args] = value
+        while len(self._data) > self._max_size:
+            self._data.popitem(last=False)
+        return value
+
+def test_LRU():
+    calls = []
+    def f(x):
+        calls.append(x)
+        return x ** 2
+
+    cache = _LRU(3)
+    assert cache.lru_call(f, 2) == 4
+    assert cache.lru_call(f, 3) == 9
+    assert cache.lru_call(f, 4) == 16
+    assert calls == [2, 3, 4]
+    # cache hits do not call fn
+    assert cache.lru_call(f, 2) == 4
+    assert cache.lru_call(f, 3) == 9
+    assert calls == [2, 3, 4]
+    # when cache is full, least-recently-used items get evicted first
+    assert cache.lru_call(f, 5) == 25 # drops 4
+    assert calls == [2, 3, 4, 5]
+    assert cache.lru_call(f, 4) == 16 # drops 2
+    assert calls == [2, 3, 4, 5, 4]
+    assert cache.lru_call(f, 2) == 4
+    assert calls == [2, 3, 4, 5, 4, 2]
 
 class ZSS(object):
     """Object representing a .zss file opened for reading.
@@ -211,12 +259,7 @@ class ZSS(object):
         else:
             self._executor = ProcessPoolExecutor(parallelism)
 
-        # This slightly awkward way of setting this up is necessary to prevent
-        # the LRU object from holding a reference to 'self', which would
-        # create a reference loop. (Which would be bad, since we have a
-        # __del__ method.)
-        self._index_block_lru = LRU(ZSS._get_index_block_impl,
-                                    index_block_cache)
+        self._index_block_lru = _LRU(index_block_cache)
 
         self._mrbs = weakref.WeakKeyDictionary()
         self._closed = False
@@ -253,7 +296,8 @@ class ZSS(object):
         return _decode_header_data(header_encoded)
 
     def _get_index_block(self, offset, block_length):
-        return self._index_block_lru(self, offset, block_length)
+        return self._index_block_lru.lru_call(self._get_index_block_impl,
+                                              offset, block_length)
 
     def _get_index_block_impl(self, offset, block_length):
         chunk = self._transport.chunk_read(offset, block_length)
@@ -266,6 +310,11 @@ class ZSS(object):
             raise ZSSCorrupt("%s:%s: "
                              "expecting index block but found data block"
                              % (self._transport.name, offset))
+        if block_level > MAX_LEVEL:
+            raise ZSSCorrupt("%s:%s: "
+                             "expecting index block but found "
+                             "level %s extension block"
+                             % (self._transport.name, offset, block_level))
         data = self._decompress(zdata)
         return (block_level, unpack_index_records(data))
 
@@ -288,6 +337,7 @@ class ZSS(object):
         block_length = self._root_index_length
         while True:
             block_level, values = self._get_index_block(offset, block_length)
+
             assert block_level > 0
             keys, offsets, block_lengths = values
             # This gives us the index of the first block whose *first* entry
@@ -468,6 +518,9 @@ class ZSS(object):
         Key points:
         - If skip_index is true, then it skips over index blocks (i.e.,
           block_level will always be 0).
+
+        - It unconditionally skips over "extension blocks" (those with level
+          >= 64).
 
         - These calls are performed in parallel in however many worker
           processes were configured when this ZSS object was created;

@@ -50,8 +50,8 @@ import zss._zss
 
 CRC_LENGTH = 8
 
-# Reserve the top half of the levels for future extension
-MAX_LEVEL = 127
+# Reserve high levels for future extensions
+MAX_LEVEL = 63
 
 # "ZSS", three bytes from urandom, and 2 bytes to serve as a version
 # identifier in case that turns out to be useful.
