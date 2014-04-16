@@ -257,8 +257,8 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="0.64999949"
-     inkscape:cx="1008.0133"
-     inkscape:cy="1707.0901"
+     inkscape:cx="1140.3211"
+     inkscape:cy="585.55076"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
@@ -524,7 +524,7 @@
          y="-27.250072"
          x="368.63794"
          sodipodi:role="line"
-         id="tspan10954-8-9-3-3">Length and CRC are computed for this span</tspan></text>
+         id="tspan10954-8-9-3-3">Length and CRC are computed for this data</tspan></text>
     <rect
        rx="0"
        ry="26.263966"
@@ -1229,7 +1229,7 @@
          id="tspan2991-3-2-8-7-1-1"
          sodipodi:role="line">Level<tspan
    style="font-style:italic"
-   id="tspan5048"> n</tspan> payloads contain one or more concatenated descriptions of level (<tspan
+   id="tspan5048"> n</tspan> payloads contain one or more concatenated references to level (<tspan
    style="font-style:italic"
    id="tspan5050">n</tspan> - 1) blocks.</tspan></text>
     <text

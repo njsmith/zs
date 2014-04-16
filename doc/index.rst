@@ -6,16 +6,15 @@
 ZSS - compressed sorted sets
 ============================
 
-ZSS is a simple read-only file format for storing, distributing, and
-querying very large sets of arbitrary binary values (up to tens of
-terabytes and beyond). It allows the data to be stored in compressed
-form, while still supporting very fast queries for either specific
-entries, or for all entries in a specified range of values (e.g.,
-prefix searches), and allows highly-CPU-parallel decompression. It's
-well suited to serve as a basis for large static key/value stores, or
-for storing even larger databases across multiple machines (though
-each individual ZSS database must be contained within a single
-operating-system level file.)
+ZSS is a simple read-only file format designed for archiving,
+distributing, and querying very large collections of arbitrary binary
+values (up to tens of terabytes and beyond). It allows the data to be
+stored in compressed form, while still supporting very fast queries
+for either specific entries, or for all entries in a specified range
+of values (e.g., prefix searches), and allows highly-CPU-parallel
+decompression. It places an emphasis on data integrity -- all data is
+protected by 64-bit CRC checksums. It's well suited to serve as a
+basis for large static key/value stores.
 
 Why is this useful? Consider just the 3-gram counts from the 2012 US
 English release of the `Google N-grams
@@ -41,8 +40,9 @@ operations (e.g., looking at all three-word phrases beginning "this
 is"), decompression speed is limited only by the number of available
 CPUs.
 
-Here we document both the details of the language-neutral ZSS file
-format, and the Python ``zss`` library which can be used to read and
+This manual documents both the details of the ZSS file format itself,
+and the Python reference implementation, which provides a library
+interface and a command-line ``zss`` tool that can be used to read and
 write files in this format.
 
 Contents:
@@ -51,6 +51,8 @@ Contents:
    :maxdepth: 2
 
    logistics.rst
+
+   cmdline.rst
 
    read.rst
 
