@@ -1,0 +1,28 @@
+These .svg files use the Lato and Inconsolata fonts. To let web
+browsers display them correctly on arbitrary computers that may or may
+not have the fonts installed, we have carefully inserted some magic
+into the <defs> block at the top of the .svg file:
+
+  <style>
+    @import url(https://fonts.googleapis.com/css?family=Lato:400,700,400italic,700italic|Inconsolata);
+  </style>
+
+This has to be done in a regular text editor -- inkscape knows nothing
+about <style> blocks or web-fonts like this. (Fortunately, it does
+preserve the block through load/save cycles, though.)
+
+You should probably have the fonts installed if you want to edit the
+files -- inkscape doesn't know how to interpret CSS webfonts, so if
+you don't have them available on your system then it will display
+everything using a fallback font. (The key to how this all works is
+that the actual text blocks in the .svg file just specify the name of
+the font to be used, and then it's the rendering software's job to
+find a font with the appropriate name. Inkscape will look for such
+fonts by checking the fonts generally available on your system. Web
+browsers will try that, but will also look into @font-face
+specifications, which specify font-name -> url mappings.)
+
+So keep an eye out in case this ever gets lost, and make sure to
+update it in case the fonts ever change. And then make sure to test it
+by viewing the file in a web browser on a system that *doesn't* have
+these fonts installed.
