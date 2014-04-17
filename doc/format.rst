@@ -28,10 +28,13 @@ Overview and general notes
 
 A ZSS file has the following parts:
 
-* A `*magic number*
-  <https://en.wikipedia.org/wiki/File_format#Magic_number>`_: 8 fixed
+* A |magic number|_: 8 fixed
   bytes that exist just to make it easy to tell that a certain file is
   in fact a .zss file.
+
+.. _magic number: https://en.wikipedia.org/wiki/File_format#Magic_number
+
+.. |magic number| replace:: *magic number*
 
 * A *header*, which contains general information about the file.
 
@@ -233,9 +236,9 @@ Outside of the header, integers are encoded in the *uleb128* format,
 familiar from the `DWARF debugging format
 <https://en.wikipedia.org/wiki/DWARF>`_. Okay, maybe not so
 familiar. This is a simple variable-length encoding for unsigned
-integers of arbitrary size using **u**nsigned **l**ittle-**e**ndian
-**b**ase-**128**. To read a uleb128 value, you proceed from the
-beginning of the string, one byte at a time. The lower 7 bits of the
+integers of arbitrary size using **u**\nsigned **l**\ittle-**e**\ndian
+**b**\ase-**128**. To read a uleb128 value, you proceed from the
+beginning of the string, one byte at a time. The lower 7 bits of each
 byte give you the next 7 bits of your integer. This is little-endian,
 so the first byte gives you the least-significant 7 bits of your
 integer, then the next byte gives you bits 8 through 15, the one after
