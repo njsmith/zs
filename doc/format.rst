@@ -1,17 +1,22 @@
 On-disk layout of ZSS files
 ===========================
 
-ZSS is a file format designed to reliably and efficiently store a
-multiset of records, where each record is an uninterpreted string of
-binary data, and to efficiently locate any record that falls within a
-given ASCIIbetical range.
+This page provides a complete specification of the ZSS file format,
+along with rationale for specific design choices; it should be read by
+anyone who plans to implement a new reader or write for the
+format, or is just interested in how things work under the covers.
 
-In general, ZSS files are designed to achieve the following goals:
+Overview and general notes
+--------------------------
+
+ZSS is a read-only database format designed to store a multiset of
+records, where each record is an uninterpreted string of binary
+data. The main design goals are:
 
 * Locating an arbitrary record, or sorted span of records, should be
   fast.
 * Doing a streaming read of a large span of records should be fast.
-* Hardware is unreliable, especially when dealing with terabytes and
+* Hardware is unreliable, especially on the scale of terabytes and
   years, and ZSS is designed for long-term archival of multi-terabyte
   data. It must be possible to quickly and reliably validate the
   integrity of the data returned by every operation.
@@ -20,31 +25,35 @@ In general, ZSS files are designed to achieve the following goals:
 * Files should be as small as possible while achieving the above
   goals.
 
-This page provides a complete specification of the ZSS file format,
-along with rationale.
+The main complication influencing ZSS's design is that
+compression/decompression is necessary to achieve reasonable storage
+sizes, but these operations are slow, block-oriented, and inherently
+serial. Compressing a chunk of data is like wrapping it up into an
+opaque bundle. The only way to find something inside is to first
+unwrap (decompress) the whole thing. This is why it won't work to
+simply write our data into a large text file and then use ``gzip`` (or
+whatever) on the whole thing: the only way to find any piece of data
+would then be to decompress the whole file, which takes ages. Instead,
+we need to split our data up into multiple smaller bundles. Once we've
+done this, locating individual records is faster, because we only have
+to unwrap a single small bundle, not a huge one. And, it turns out,
+splitting up our data into multiple bundles also makes bulk reads
+faster. If we want to read *all* the data, then we have to decompress
+all of it, so we have to do the same total amount of decompression
+whether it's packed into one big bundle or lots of small ones. In the
+multiple-bundle case, though, we can easily divvy up this work across
+multiple CPUs, and thus finish the job more quickly. But, there is a
+downside to splitting up our data like this: if you make your bundles
+too small, then the compression algorithm won't be able to find many
+redundancies to compress out, and so your compression ratio will not
+be very good. In particular, trying to compress individual records
+would be hopeless.
 
-Overview and general notes
---------------------------
-
-A ZSS file has the following parts:
-
-* A |magic number|_: 8 fixed
-  bytes that exist just to make it easy to tell that a certain file is
-  in fact a .zss file.
-
-.. _magic number: https://en.wikipedia.org/wiki/File_format#Magic_number
-
-.. |magic number| replace:: *magic number*
-
-* A *header*, which contains general information about the file.
-
-* A series of *blocks*. Blocks are further subdivided into:
-
-  * *Data blocks*, which contain the records themselves.
-
-  * *Index blocks*, which define a search tree over the data blocks,
-    helping us efficiently locate the data blocks that might contain
-    any given span of records.
+So our basic solution is to bundle records together into
+moderately-sized blocks, and then compress each block. Then we add
+some framing to let us figure out where each block starts and ends,
+and add an index structure to let us quickly find which blocks contain
+records that match some query.
 
 The overall structure looks like this:
 
@@ -58,41 +67,21 @@ other index blocks, until eventually the lowest-level index blocks
 refer to data blocks. By following these links, we can locate any
 arbitrary record in :math:`O(\log n)` time.
 
-The division of data into blocks is very important for allowing
-time-efficient lookup while still achieving space-efficient storage.
-There is an intrinsic tradeoff between these goals, because
-compressing a chunk of data is like wrapping it up into an opaque
-bundle. The only way to find something inside is to first unwrap
-(decompress) the whole thing, and decompression is slow. So lookup is
-faster when we split our data into many separate chunks and compress
-each individually. But, if you make the bundles too small, then the
-compression algorithm won't be able to find many redundancies to
-compress out, and so your compression ratio will not be very good. In
-particular, trying to compress individual records would be
-hopeless. So our solution is to bundle records together into
-moderately-sized blocks, and then compress each block. Then we add
-some framing to let us figure out where each block starts and ends,
-and add an index structure to let us quickly find an arbitrary data
-block.
-
-The other access mode that ZSS files are designed for is bulk,
-streaming reads of record spans. The most obvious application of this
-functionality is for iterating through all the records in the file,
-but this is also used for range queries in general: we first use the
-index to find the first record which matches our query, and then do a
-streaming read forward from this point. Here, again, the division of
-data into blocks is very useful: decompression is a slow and
-inherently serial operation; adding more CPUs doesn't let you
-decompress any single chunk of data any faster. But a bulk read
-involves decompressing many chunks, and this can be trivially
-parallelized across as many CPUs as are available.
-
-To support the streaming access mode, we require that all records be
-sorted, both within and between blocks
+In addition, we require data blocks to be placed in sorted order on
+the disk. This allows us to do streaming reads starting from any
+point, which makes for nicely efficient disk access patterns. And
+range queries are supported by combining these two modes: first we
+traverse the index to figure out which blocks contain records that
+fall into our range, and then we do a streaming read across these
+blocks.
 
 To achieve our data integrity goals, every byte in the file is
-protected by a 64-bit CRC. Specifically, we use "CRC-64xz", as defined
-by the ``.xz`` file format, with polynomial 0x42f0e1eba9ea3693.
+protected by a 64-bit CRC. Specifically, we use the same CRC-64
+calculation that the `.xz file format
+<http://tukaani.org/xz/xz-file-format.txt>`_ does. The `Rocksoft model
+<http://www.ross.net/crc/crcpaper.html>`_ parameters for this CRC are:
+polynomial = 0x42f0e1eba9ea3693, reflect in = True, xor in =
+0xffffffffffffffff, reflect out = True, xor out = 0xffffffffffffffff.
 
 The details
 -----------
@@ -105,14 +94,16 @@ Here's the big picture: details follow in prose below.
 Magic number
 ''''''''''''
 
-Every valid ZSS file begins with the 8 bytes whose hexadecimal
-representation is::
+To make it easy to distinguish ZSS files from non-ZSS files, every
+valid ZSS file begins with 8 `magic bytes
+<https://en.wikipedia.org/wiki/File_format#Magic_number>`_. Specifically,
+these ones (written in hex)::
 
   5a 53 53 1c 8e 6c 00 01
 
-(This is the ascii string ``ZSS``, followed by 3 random bytes,
+This is the ascii string ``ZSS``, followed by 3 random bytes,
 followed by two bytes which might be used as a version identifier in
-case there is ever a ZSS version 2.)
+case there is ever a ZSS version 2.
 
 Writing out a large ZSS file is a somewhat involved operation that
 might take a long time; it's possible for a hardware or software
@@ -148,9 +139,9 @@ complete, valid ZSS file.
 
 Any file which does not begin with the correct ZSS magic is not a
 valid ZSS file, and should be rejected by ZSS file readers. Files with
-the SSZ magic are not valid ZSS files. However, polite ZSS readers
-should generally check for the SSZ magic, and if encountered, provide
-a more informative error message while rejecting the file.
+the ``SSZ`` magic are not valid ZSS files. However, polite ZSS readers
+should generally check for the ``SSZ`` magic, and if encountered,
+provide a more informative error message while rejecting the file.
 
 
 Header
@@ -161,7 +152,7 @@ Within the header, we make life easier for simple tools like `file
 integers using fixed-length 64-bit little-endian format (``u64le`` for
 short).
 
-The header contains the following fields:
+The header contains the following fields, in order:
 
 * Length (``u64le``): The length of the data in the header. This does
   not include either the length field itself, or the trailing CRC --
@@ -297,6 +288,7 @@ Data block payloads encode a list of records. Each record has the
 form:
 
 * Record length (``uleb128``): The number of bytes in this record.
+
 * Record contents (arbitrary data): That many bytes of data, making up
   the contents of this record.
 
@@ -313,11 +305,14 @@ data blocks.
 Each index payload entry has the form:
 
 * Key length (``uleb128``): The number of bytes in the "key".
+
 * Key value (arbitrary data): That many bytes of data, making up the
   "key" for the pointed-to block. (See below for the invariants this
   key must satisfy.)
+
 * Block offset (``uleb128``): The file offset at which the pointed-to
   block is located.
+
 * Block length (``uleb128``): The length of the pointed-to block. This
   *includes* the root index block's length and CRC fields; the idea is
   *that doing a single read of this length, a the given offset, will
