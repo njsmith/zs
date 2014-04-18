@@ -9,7 +9,6 @@
 
 from contextlib import contextmanager
 import subprocess
-from tempfile import mkstemp
 import os
 import os.path
 import time
@@ -40,11 +39,12 @@ def _copy_to_stdout(handle):
             break
         sys.stdout.write(byte)
 
+TCP_TIMEOUT = 5.0
+TCP_POLL = 0.01
+
 def wait_for_tcp(port):  # pragma: no cover
-    TIMEOUT = 5.0
-    POLL = 0.01
     now = time.time()
-    while time.time() - now < TIMEOUT:
+    while time.time() - now < TCP_TIMEOUT:
         try:
             s = socket.create_connection(("127.0.0.1", port))
         except socket.error:
@@ -52,9 +52,23 @@ def wait_for_tcp(port):  # pragma: no cover
         else:
             s.close()
             break
-        time.sleep(POLL)
+        time.sleep(TCP_POLL)
     else:
         raise IOError("server not listening after %s seconds" % (TIMEOUT,))
+
+def wait_for_no_tcp(port):  # pragma: no cover
+    now = time.time()
+    while time.time() - now < TCP_TIMEOUT:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind(("127.0.0.1", port))
+        except socket.error:
+            break
+        finally:
+            s.close()
+        time.sleep(TCP_POLL)
+    else:
+        raise IOError("server still listening after %s seconds" % (TIMEOUT,))
 
 def spawn_server(argv, port, **kwargs):
     process = subprocess.Popen(argv,
@@ -66,7 +80,6 @@ def spawn_server(argv, port, **kwargs):
     stdout_thread = threading.Thread(target=_copy_to_stdout,
                                      args=(process.stdout,))
     stdout_thread.start()
-    wait_for_tcp(port)
     return (process, stdout_thread)
 
 def shutdown_server(process_thread, name):
@@ -78,6 +91,14 @@ def shutdown_server(process_thread, name):
     process.terminate()
     process.wait()
     stdout_thread.join()
+
+@contextmanager
+def server_manager(name, argv, port, **kwargs):
+    server = spawn_server(argv, port, **kwargs)
+    wait_for_tcp(port)
+    yield "http://127.0.0.1:%s/" % (port,)
+    shutdown_server(server, name)
+    wait_for_no_tcp(port)
 
 @contextmanager
 def nginx_server(root, port=PORT, error_exc=SkipTest):
@@ -106,26 +127,16 @@ def nginx_server(root, port=PORT, error_exc=SkipTest):
         # relative to /etc/nginx
         absolute_conf_path = os.path.join(*([".."] * 20
                                             + [os.path.abspath(conf_path)]))
-        server = None
-        try:
-            server = spawn_server([nginx, "-c", conf_path], port)
-            yield "http://127.0.0.1:%s/" % (port,)
-        finally:
-            shutdown_server(server, "nginx")
+        with server_manager("nginx", [nginx, "-c", conf_path], port) as url:
+            yield url
 
-@contextmanager
 def simplehttpserver(root, port=PORT, error_exc=SkipTest):
     if six.PY2:  # pragma: no cover
         mod = "SimpleHTTPServer"
     else:
         mod = "http.server"
-    server = None
-    try:
-        server = spawn_server([sys.executable, "-m", mod, str(port)], port,
-                               cwd=root)
-        yield "http://127.0.0.1:%s/" % (port,)
-    finally:
-        shutdown_server(server, mod)
+    return server_manager(mod, [sys.executable, "-m", mod, str(port)], port,
+                          cwd=root)
 
 def web_server(root, port=PORT, error_exc=SkipTest, range_support=True):
     if range_support:
