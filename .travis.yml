@@ -2,7 +2,7 @@ language: python
 python:
   - 2.7
 before_install:
-  - sudo apt-get -qq install nginx
+  - sudo apt-get -qq install nginx fuser
   # This has to be done to let it create some files that nginx insists must exist, yet only root can create.
   - sudo /etc/init.d/nginx start
   - pip install coverage nose-cov lxml

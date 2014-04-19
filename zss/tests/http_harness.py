@@ -72,6 +72,7 @@ def wait_for_no_tcp(port):  # pragma: no cover
     else:
         subprocess.call(["ps", "-A", "fwwwww"])
         subprocess.call(["sudo", "fuser", "-v", "-n", "tcp", str(port)])
+        subprocess.call(["netstat", "-na"])
         raise IOError("server still listening after %s seconds" % (TCP_TIMEOUT,))
 
 def spawn_server(argv, port, **kwargs):
