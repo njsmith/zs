@@ -7,7 +7,7 @@
 # up a little harness for spawning a little temporary static-only
 # localhost-only nginx server.
 
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 import subprocess
 import os
 import os.path
@@ -15,6 +15,7 @@ import time
 import socket
 import threading
 import sys
+import random
 
 import requests
 import six
@@ -22,9 +23,6 @@ import six
 from nose.plugins.skip import SkipTest
 
 from .util import test_data_path, tempname
-
-# a random number
-PORT = 43124
 
 def find_nginx():  # pragma: no cover
     for loc in [os.environ.get("NGINX_PATH"), "/usr/sbin/nginx"]:
@@ -39,41 +37,38 @@ def _copy_to_stdout(handle):
             break
         sys.stdout.write(byte)
 
-TCP_TIMEOUT = 15.0
-TCP_POLL = 0.01
+def find_port():
+    # We used to just use a fixed port, but it turns out that because of
+    # TIME_WAIT annoyances it's possible for our server socket to become
+    # un-bindable even after the process that was using it goes away:
+    #   http://hea-www.harvard.edu/~fine/Tech/addrinuse.html
+    # So, merely waiting for the web server process to exit does not mean that
+    # its socket can be reused. Instead, we should pick a nice clean port
+    # from scratch each time.
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        # Get the kernel to assign a port.
+        s.bind(("127.0.0.1", 0))
+        # We made no connections to/from this port, so it can't get stuck in
+        # TIME_WAIT. So when we exit the context manager, it will close, and
+        # its port is guaranteed to be free. (Of course it could still get
+        # grabbed by someone else before we start our web server on it, but
+        # that race condition is unavoidable.)
+        return s.getsockname()[1]
 
-def wait_for_tcp(port):  # pragma: no cover
-    now = time.time()
-    while time.time() - now < TCP_TIMEOUT:
+def wait_for_tcp(port, timeout=10.0, poll_wait=0.01):  # pragma: no cover
+    start = time.time()
+    while time.time() - start < timeout:
         try:
             s = socket.create_connection(("127.0.0.1", port))
         except socket.error:
             continue
         else:
             s.close()
-            print("waited %s for server to come UP" % (time.time() - now,))
+            print("waited %s for server to come UP" % (time.time() - start,))
             break
-        time.sleep(TCP_POLL)
+        time.sleep(poll_wait)
     else:
-        raise IOError("server not listening after %s seconds" % (TCP_TIMEOUT,))
-
-def wait_for_no_tcp(port):  # pragma: no cover
-    now = time.time()
-    while time.time() - now < TCP_TIMEOUT:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            s.bind(("127.0.0.1", port))
-        except socket.error:
-            print("waited %s for server to come DOWN" % (time.time() - now,))
-            break
-        finally:
-            s.close()
-        time.sleep(TCP_POLL)
-    else:
-        subprocess.call(["ps", "-A", "fwwwww"])
-        subprocess.call(["sudo", "fuser", "-v", "-n", "tcp", str(port)])
-        subprocess.call(["netstat", "-na"])
-        raise IOError("server still listening after %s seconds" % (TCP_TIMEOUT,))
+        raise IOError("server not listening after %s seconds" % (timeout,))
 
 def spawn_server(argv, port, **kwargs):
     process = subprocess.Popen(argv,
@@ -103,10 +98,10 @@ def server_manager(name, argv, port, **kwargs):
     wait_for_tcp(port)
     yield "http://127.0.0.1:%s/" % (port,)
     shutdown_server(server, name)
-    wait_for_no_tcp(port)
 
 @contextmanager
-def nginx_server(root, port=PORT, error_exc=SkipTest):
+def nginx_server(root, error_exc=SkipTest):
+    port = find_port()
     nginx = find_nginx()
     if nginx is None:  # pragma: no cover
         raise error_exc
@@ -135,7 +130,8 @@ def nginx_server(root, port=PORT, error_exc=SkipTest):
         with server_manager("nginx", [nginx, "-c", conf_path], port) as url:
             yield url
 
-def simplehttpserver(root, port=PORT, error_exc=SkipTest):
+def simplehttpserver(root, error_exc=SkipTest):
+    port = find_port()
     if six.PY2:  # pragma: no cover
         mod = "SimpleHTTPServer"
     else:
@@ -143,11 +139,11 @@ def simplehttpserver(root, port=PORT, error_exc=SkipTest):
     return server_manager(mod, [sys.executable, "-m", mod, str(port)], port,
                           cwd=root)
 
-def web_server(root, port=PORT, error_exc=SkipTest, range_support=True):
+def web_server(root, error_exc=SkipTest, range_support=True):
     if range_support:
-        return nginx_server(root, port=port, error_exc=error_exc)
+        return nginx_server(root, error_exc=error_exc)
     else:
-        return simplehttpserver(root, port=port, error_exc=error_exc)
+        return simplehttpserver(root, error_exc=error_exc)
 
 def test_web_servers():
     for server in [nginx_server, simplehttpserver]:
