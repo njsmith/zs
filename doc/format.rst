@@ -2,60 +2,60 @@ On-disk layout of ZSS files
 ===========================
 
 This page provides a complete specification of the ZSS file format,
-along with rationale for specific design choices; it should be read by
+along with rationale for specific design choices. It should be read by
 anyone who plans to implement a new reader or write for the
 format, or is just interested in how things work under the covers.
 
 Overview and general notes
 --------------------------
 
-ZSS is a read-only database format designed to store a multiset of
-records, where each record is an uninterpreted string of binary
-data. The main design goals are:
+ZSS is a read-only database format designed to store a `multiset
+<https://en.wikipedia.org/wiki/Multiset>`_ of records, where each
+record is an uninterpreted string of binary data. The main design
+goals are:
 
 * Locating an arbitrary record, or sorted span of records, should be
   fast.
 * Doing a streaming read of a large span of records should be fast.
 * Hardware is unreliable, especially on the scale of terabytes and
   years, and ZSS is designed for long-term archival of multi-terabyte
-  data. It must be possible to quickly and reliably validate the
-  integrity of the data returned by every operation.
+  data. Therefore it must be possible to quickly and reliably validate
+  the integrity of the data returned by every operation.
 * It should be reasonably efficient to access files over slow, "dumb"
   transports like HTTP.
 * Files should be as small as possible while achieving the above
   goals.
 
-The main complication influencing ZSS's design is that
-compression/decompression is necessary to achieve reasonable storage
-sizes, but these operations are slow, block-oriented, and inherently
-serial. Compressing a chunk of data is like wrapping it up into an
-opaque bundle. The only way to find something inside is to first
-unwrap (decompress) the whole thing. This is why it won't work to
-simply write our data into a large text file and then use ``gzip`` (or
-whatever) on the whole thing: the only way to find any piece of data
-would then be to decompress the whole file, which takes ages. Instead,
-we need to split our data up into multiple smaller bundles. Once we've
-done this, locating individual records is faster, because we only have
-to unwrap a single small bundle, not a huge one. And, it turns out,
-splitting up our data into multiple bundles also makes bulk reads
-faster. If we want to read *all* the data, then we have to decompress
-all of it, so we have to do the same total amount of decompression
-whether it's packed into one big bundle or lots of small ones. In the
-multiple-bundle case, though, we can easily divvy up this work across
-multiple CPUs, and thus finish the job more quickly. But, there is a
-downside to splitting up our data like this: if you make your bundles
-too small, then the compression algorithm won't be able to find many
-redundancies to compress out, and so your compression ratio will not
-be very good. In particular, trying to compress individual records
-would be hopeless.
+The main complication influencing ZSS's design is that compression is
+necessary to achieve reasonable storage sizes, but decompression is
+slow, block-oriented, and inherently serial, which puts the last goal
+in direct conflict with the first two. Compressing a chunk of data is
+like wrapping it up into an opaque bundle. The only way to find
+something inside is to first unwrap (decompress) the whole thing. This
+is why it won't work to simply write our data into a large text file
+and then use a standard compression program like ``gzip`` on the whole
+thing. If we did this, then the only way to find any piece of data
+would be to decompress the whole file, which takes ages. Instead, we
+need some way to split our data up into multiple smaller bundles. Once
+we've done this, reading individual records can be fast, because we
+only have to unwrap a single small bundle, not a huge one. And, it
+turns out, splitting up our data into multiple bundles also makes bulk
+reads faster. For a large read, we have to unpack the same amount of
+total data regardless of whether it's divided into small bundles or
+not, so the total work is constant. But, in the multiple-bundle case,
+we can easily divvy up this work across multiple CPUs, and thus finish
+the job more quickly. So, small bundles are great -- but, they also
+have a downside: if we make our bundles too small, then the
+compression algorithm won't be able to find many redundancies to
+compress out, and so our compression ratio will not be very good. In
+particular, trying to compress individual records would be hopeless.
 
-So our basic solution is to bundle records together into
-moderately-sized blocks, and then compress each block. Then we add
-some framing to let us figure out where each block starts and ends,
-and add an index structure to let us quickly find which blocks contain
-records that match some query.
-
-The overall structure looks like this:
+Our solution is to bundle records together into moderately-sized
+blocks, and then compress each block. Then we add some framing to let
+us figure out where each block starts and ends, and add an index
+structure to let us quickly find which blocks contain records that
+match some query, and ta-da, we have a ZSS file. The resulting
+structure looks like this:
 
 .. image:: /figures/format-overview.*
    :width: 100%
@@ -67,29 +67,38 @@ other index blocks, until eventually the lowest-level index blocks
 refer to data blocks. By following these links, we can locate any
 arbitrary record in :math:`O(\log n)` time.
 
-In addition, we require data blocks to be placed in sorted order on
-the disk. This allows us to do streaming reads starting from any
-point, which makes for nicely efficient disk access patterns. And
-range queries are supported by combining these two modes: first we
-traverse the index to figure out which blocks contain records that
-fall into our range, and then we do a streaming read across these
+In addition, we require data blocks to be arranged in sorted order
+within the file. This allows us to do streaming reads starting from
+any point, which makes for nicely efficient disk access patterns. And
+range queries are supported by combining these two access strategies:
+first we traverse the index to figure out which blocks contain records
+that fall into our range, and then we do a streaming read across these
 blocks.
 
-To achieve our data integrity goals, every byte in the file is
-protected by a 64-bit CRC. Specifically, we use the same CRC-64
-calculation that the `.xz file format
-<http://tukaani.org/xz/xz-file-format.txt>`_ does. The `Rocksoft model
-<http://www.ross.net/crc/crcpaper.html>`_ parameters for this CRC are:
-polynomial = 0x42f0e1eba9ea3693, reflect in = True, xor in =
-0xffffffffffffffff, reflect out = True, xor out = 0xffffffffffffffff.
+Checksumming
+------------
 
-The details
------------
+To achieve our data integrity goals, every byte in the file that could
+possibly contain undetected corruption is protected by a 64-bit
+CRC. Specifically, we use the same CRC-64 calculation that the `.xz
+file format <http://tukaani.org/xz/xz-file-format.txt>`_ does. The
+`Rocksoft model <http://www.ross.net/crc/crcpaper.html>`_ parameters
+for this CRC are: polynomial = 0x42f0e1eba9ea3693, reflect in = True,
+xor in = 0xffffffffffffffff, reflect out = True, xor out =
+0xffffffffffffffff, check = 0x995dc9bbdf1939fa.
 
-Here's the big picture: details follow in prose below.
+Layout details
+--------------
+
+Here's the big picture -- refer to it while reading the full details
+below.
 
 .. image:: /figures/format-details.*
    :width: 100%
+
+ZSS files consist of a *magic number*, followed by a *header*, followed by
+a sequence of *blocks*. Blocks come in two types: *data blocks*, and
+*index blocks*.
 
 Magic number
 ''''''''''''
@@ -99,7 +108,7 @@ valid ZSS file begins with 8 `magic bytes
 <https://en.wikipedia.org/wiki/File_format#Magic_number>`_. Specifically,
 these ones (written in hex)::
 
-  5a 53 53 1c 8e 6c 00 01
+  5a 53 53 1c 8e 6c 00 01    # Good magic
 
 This is the ascii string ``ZSS``, followed by 3 random bytes,
 followed by two bytes which might be used as a version identifier in
@@ -117,7 +126,7 @@ operation had completed, to know whether we can trust the file left
 behind. Therefore we also define a second magic number to be used
 specifically for partial ZSS files::
 
-  5a 53 53 1c 8e 6c 00 01
+  53 53 5a 1c 8e 6c 00 01    # Bad magic
 
 This is the same as the regular magic value, except that the string
 ``ZSS`` has been replaced by ``SSZ``.
@@ -183,31 +192,34 @@ The header contains the following fields, in order:
   contents of a ZSS file, regardless of storage details like
   compression mode, block size, index fanout, etc.
 
-* Compression method (16 bytes): A null-padded string specifying the
-  compression method used. Currently defined methods include:
+* Codec (16 bytes): A null-padded string specifying the codec
+  (compression method) used. Currently defined codecs include:
 
   * ``none``: Block payloads are stored in raw, uncompressed form.
 
-  * ``deflate``: Block payloads are stored using the deflate
-    format as defined in RFC XX. (Note that this is different from
-    both the gzip format and the zlib format, which use different
-    framing and checksums. We provide our own framing and checksum, so
-    we just use raw deflate streams.)
+  * ``deflate``: Block payloads are stored using the deflate format as
+  defined in `RFC 1951 <https://tools.ietf.org/html/rfc1951>`_. Note
+  that this is different from both the gzip format (RFC 1952) and the
+  zlib format (RFC 1950), both of which use different framing and
+  checksums. ZSS provides its own framing and checksum, so we just use
+  raw deflate streams.
 
-  * ``bz2``: Block payloads are compressed using libbzip2
-    (XX). Unfortunately there is no easy way to get a raw, unframed
-    bzip2 stream, so using this method adds 10-20 bytes of extra
-    framing overhead. Fortunately the improved compression usually
-    more than makes up for this.
+  * ``bz2``: Block payloads are compressed using `the bzip2 format
+  <https://en.wikipedia.org/wiki/Bzip2>`_. Unfortunately there is no
+  easy way to get a raw, unframed bzip2 stream with commonly available
+  libraries, so using this method adds 10-20 bytes of extra framing
+  overhead. Fortunately the improved compression usually more than
+  makes up for this.
 
-* Metadata length (``u64le``): The number of bytes in the...
+* Metadata length (``u64le``): The length of the next field:
 
 * Metadata (UTF-8 encoded JSON): This field allows arbitrary metadata
   to be attached to a ZSS file. The only restriction is that the
   encoded value must be what JSON calls an "object" (also known as a
   dict, hash table, etc. -- the outermost characters have to be
   ``{}``). But this object can contain arbitrarily complex values
-  (though we recommend restricting yourself to strings for the keys).
+  (though we recommend restricting yourself to strings for the
+  keys). See `Metadata conventions`_.
 
 * <extensions> (??): Compliant readers should ignore any data
   occurring between the end of the metadata field and the end of the
@@ -239,17 +251,18 @@ going and read the next byte. If it is 0, then you are
 done. Examples::
 
   uleb128 string  <->  integer value
-              00              0x00
-              7f              0x7f
-           80 01              0x80
-           ff 20            0x107f
-  80 80 80 80 20           2 ** 33
+  --------------       -------------
+              00                0x00
+              7f                0x7f
+           80 01                0x80
+           ff 20              0x107f
+  80 80 80 80 20             2 ** 33
 
 (This format is also used by `protocol buffers
-<https://en.wikipedia.org/wiki/Protocol_Buffers>`_.) NOTE: this format
+<https://en.wikipedia.org/wiki/Protocol_Buffers>`_.) This format
 allows for redundant representations by adding leading zeros, e.g. the
 value 0 could also be written ``80 00``. However, doing this is
-forbidden.
+forbidden; all values must be encoded in their shortest form.
 
 Blocks themselves all have the same format:
 
@@ -265,9 +278,8 @@ Blocks themselves all have the same format:
 
 * Compressed payload (arbitrary data): The rest of the block after the
   level is a compressed representation of the payload. This should be
-  decompressed according to the value of the "Compression method"
-  field in the header, and then interpreted according to the rules
-  below.
+  decompressed according to the value of the codec field in the
+  header, and then interpreted according to the rules below.
 
 * CRC-64xz (``u64le``): CRC of the data in the block. This does not
   include the length field -- see diagram. Note that this is

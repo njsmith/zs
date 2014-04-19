@@ -52,11 +52,15 @@ Contents:
 
    logistics.rst
 
+   introduction.rst
+
    cmdline.rst
 
    read.rst
 
    write.rst
+
+   metadata.rst
 
    format.rst
 
