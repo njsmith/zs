@@ -1,7 +1,9 @@
 [run]
 branch=True
 source=zss
-omit=*/tests/*
+omit=
+  */tests/*
+  setup.py
 
 [report]
 exclude_lines =
