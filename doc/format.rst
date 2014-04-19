@@ -100,6 +100,8 @@ ZSS files consist of a *magic number*, followed by a *header*, followed by
 a sequence of *blocks*. Blocks come in two types: *data blocks*, and
 *index blocks*.
 
+.. _magic-numbers:
+
 Magic number
 ''''''''''''
 

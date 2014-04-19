@@ -1,3 +1,5 @@
+.. _metadata-conventions:
+
 Metadata conventions
 ====================
 

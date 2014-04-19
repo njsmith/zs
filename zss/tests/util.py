@@ -13,11 +13,14 @@ def test_data_path(path=""):
 
 test_data_path.__test__ = False
 
+# NEVER USE unlink_first=True WITHOUT O_EXCL
 @contextmanager
-def tempname(suffix=""):
+def tempname(suffix="", unlink_first=False):
     try:
         fd, path = mkstemp(suffix=suffix)
         os.close(fd)
+        if unlink_first:
+            os.unlink(path)
         yield path
     finally:
         try:
@@ -30,4 +33,15 @@ def test_tempname():
     with tempname(".asdf") as name:
         assert os.path.exists(name)
         assert name.endswith(".asdf")
+    assert not os.path.exists(name)
+
+    with tempname(".asdf", unlink_first=True) as name:
+        assert not os.path.exists(name)
+        assert name.endswith(".asdf")
+
+    with tempname(".asdf", unlink_first=True) as name:
+        assert not os.path.exists(name)
+        assert name.endswith(".asdf")
+        # securely create the file
+        os.close(os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL))
     assert not os.path.exists(name)

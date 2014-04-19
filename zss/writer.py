@@ -7,10 +7,13 @@ import hashlib
 import os
 import os.path
 import multiprocessing
+import Queue
 import struct
 import sys
 import getpass
 import socket
+import traceback
+from contextlib import contextmanager
 from datetime import datetime
 
 import six
@@ -18,14 +21,21 @@ import six
 from zss.common import (ZSSError,
                         MAGIC,
                         INCOMPLETE_MAGIC,
-                        MAX_LEVEL,
+                        FIRST_EXTENSION_LEVEL,
                         CRC_LENGTH,
                         encoded_crc64xz,
                         header_data_format,
                         header_data_length_format,
                         codecs,
-                        read_format)
-from zss._zss import pack_data_records, pack_index_records, write_uleb128
+                        read_format,
+                        read_length_prefixed)
+from zss._zss import (pack_data_records, pack_index_records,
+                      unpack_data_records,
+                      write_uleb128)
+
+# how often to poll for pipeline errors while blocking in the main thread, in
+# seconds
+ERROR_CHECK_FREQ = 0.1
 
 def _flush_file(f):
     f.flush()
@@ -48,7 +58,7 @@ def test__encode_header():
         "root_index_length": 0x2468864213577531,
         "file_total_length": 0x0011223344556677,
         "sha256": b"abcdefghijklmnopqrstuvwxyz012345",
-        "compression": "superzip",
+        "codec": "superzip",
         "metadata": {"this": "is", "awesome": 10},
         })
     expected_metadata = b"{\"this\": \"is\", \"awesome\": 10}"
@@ -66,39 +76,126 @@ def test__encode_header():
 class _QUIT(object):
     pass
 
+def box_exception():
+    e_type, e_obj, tb = sys.exc_info()
+    return (e_type, e_obj, traceback.extract_tb(tb))
+
+def reraise_boxed(box):
+    e_type, e_obj, extracted_tb = box
+    # XX this is super-lazy, but at least it will usually get the job done...
+    sys.stderr.writelines(traceback.format_list(extracted_tb))
+    raise e_obj
+
+# We have a very strict policy on exceptions: any exception anywhere in
+# ZSSWriter is non-recoverable.
+@contextmanager
+def errors_to(q):
+    try:
+        yield
+    except:
+        # we really and truly do want a bare except: here, because even
+        # KeyboardException should get forwarded to the main process so it has
+        # a chance to know that the child is dead.
+        q.put(box_exception())
+
+@contextmanager
+def errors_close(obj):
+    try:
+        yield
+    except:
+        obj.close()
+        raise
+
 class ZSSWriter(object):
-    def __init__(self, path, metadata, branching_factor, approx_block_size,
-                 parallelism, compression="bz2", compress_kwargs={},
-                 show_spinner=True, include_auto_metadata=True):
+    def __init__(self, path, metadata, branching_factor,
+                 parallelism="auto", codec="bz2", compress_kwargs={},
+                 show_spinner=True, include_default_metadata=True):
+        """Create a ZSSWriter object.
+
+        .. note:: In many cases it'll be easier to just use the command line
+          'zss make' tool, which is a wrapper around this class.
+
+        :arg path: File to write to. Must not already exist.
+
+        :arg metadata: Dict or dict-like containing arbitrary metadata for the
+          .zss file. See :ref:`metadata-conventions`.
+
+        :arg branching_factor: The number of entries to put into each *index*
+          block. We use a simple greedy packing strategy, where we fill up
+          index blocks until they reach this limit.
+
+        :arg parallelism: The number of CPUs to use for compression, or "auto"
+          to auto-detect. Must be >= 1.
+
+        :arg codec: The compression method to use.
+
+        :arg compress_kwargs: kwargs to pass to the codec compress
+          function. Most codecs support a compress_level argument.
+
+        :arg show_spinner: Whether to show the progress meter.
+
+        :arg include_default_metadata: Whether to auto-add some default
+          metadata (time, host, user).
+
+        Once you have a ZSSWriter object, you can use the
+        :meth:`add_data_block` and :meth:`add_file_contents` methods to write
+        data to it. It is your job to ensure that all records are added in
+        (ASCIIbetical/memcmp) sorted order.
+
+        Once you are done adding records, you must call :meth:`close`. This
+        will not be done automatically. (This is a feature, to make sure that
+        errors that cause early termination leave obviously-invalid ZSS files
+        behind.)
+
+        The most optimized way to build a ZSS file is to use
+        :meth:`add_file_contents` with terminated (not length-prefixed)
+        records. However, this is only possible if your records have some
+        fixed terminator that you can be sure never occurs within a record
+        itself.
+
+        This object uses a highly optimized and somewhat fragile
+        multiprocessing strategy. Don't be surprised if the way it reports an
+        error is to dump a message to the console and then hang...
+
+        """
+
         self._path = path
-        # Technically there is a race condition here, but oh well. This is
-        # just a safety/sanity check; it's not worth going through the
-        # contortions to use O_EXCL.
-        if os.path.exists(path):
-            raise ZSSError("%s: file already exists" % (path,))
-        self._file = open(path, "w+b")
+        # The testsuite writes lots of ZSS files to temporary storage, so
+        # better take the trouble to use O_EXCL to prevent exposing everyone
+        # who runs the test suite to security holes...
+        open_flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_BINARY"):  # pragma: no cover
+            # windows only
+            open_flags |= os.O_BINARY
+        try:
+            fd = os.open(path, open_flags)
+        except OSError as e:
+            raise ZSSError("%s: %s" % (path, e.message))
+        self._file = os.fdopen(fd, "w+b")
         self.metadata = dict(metadata)
-        if include_auto_metadata:
+        if include_default_metadata:
             self.metadata.setdefault("build-user", getpass.getuser())
             self.metadata.setdefault("build-host", socket.getfqdn())
             self.metadata.setdefault("build-time",
                                      datetime.utcnow().isoformat() + "Z")
         self.branching_factor = branching_factor
-        self.approx_block_size = approx_block_size
         self._show_spinner = show_spinner
+        if parallelism == "auto":
+            # XX put an upper bound on this
+            parallelism = multiprocessing.cpu_count()
         self._parallelism = parallelism
-        self.compression = compression
-        if self.compression not in codecs:
-            raise ZSSError("unknown compression %r (should be one of: %s)"
-                           % (compression, ", ".join(codecs)))
-        self._compress_fn = codecs[self.compression][0]
+        self.codec = codec
+        if self.codec not in codecs:
+            raise ZSSError("unknown codec %r (should be one of: %s)"
+                           % (codec, ", ".join(codecs)))
+        self._compress_fn = codecs[self.codec][0]
         self._compress_kwargs = compress_kwargs
         self._header = {
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,
             "file_total_length": 0,
             "sha256": b"\x00" * 32,
-            "compression": self.compression,
+            "codec": self.codec,
             "metadata": self.metadata,
             }
 
@@ -119,11 +216,12 @@ class ZSSWriter(object):
         self._compress_queue = multiprocessing.Queue(2 * parallelism)
         self._write_queue = multiprocessing.Queue(2 * parallelism)
         self._finish_queue = multiprocessing.Queue(1)
+        self._error_queue = multiprocessing.Queue()
         self._compressors = []
         for i in xrange(parallelism):
-            compress_args = (self.approx_block_size,
-                             self._compress_fn, self._compress_kwargs,
-                             self._compress_queue, self._write_queue)
+            compress_args = (self._compress_fn, self._compress_kwargs,
+                             self._compress_queue, self._write_queue,
+                             self._error_queue)
             p = multiprocessing.Process(target=_compress_worker,
                                         args=compress_args)
             p.start()
@@ -132,42 +230,171 @@ class ZSSWriter(object):
                        self.branching_factor,
                        self._compress_fn, self._compress_kwargs,
                        self._write_queue, self._finish_queue,
-                       self._show_spinner)
+                       self._show_spinner, self._error_queue)
         self._writer = multiprocessing.Process(target=_write_worker,
                                                args=writer_args)
         self._writer.start()
 
-    def from_file(self, file_handle, terminator=b"\n"):
+        #: Boolean attribute indicating whether this ZSSWriter is closed.
+        self.closed = False
+
+    def _check_open(self):
+        if self.closed:
+            raise ZSSError("attempted operation on closed ZSSWriter")
+
+    def _check_error(self):
+        try:
+            box = self._error_queue.get_nowait()
+        except Queue.Empty:
+            return
+        else:
+            self.close()
+            reraise_boxed(box)
+
+    def _safe_put(self, q, obj):
+        # put can block, but it might never unblock if the pipeline has
+        # clogged due to an error. so we have to check for errors occasionally
+        # while waiting.
+        while True:
+            try:
+                q.put(obj, timeout=ERROR_CHECK_FREQ)
+            except Queue.Full:
+                self._check_error()
+            else:
+                break
+
+    def _safe_join(self, process):
+        while process.is_alive():
+            self._check_error()
+            process.join(ERROR_CHECK_FREQ)
+
+    def add_data_block(self, records):
+        """Append the given set of records to the ZSS file.
+
+        :arg records: An iterable of byte strings giving the contents of each
+          record.
+        """
+
+        self._check_open()
+        with errors_close(self):
+            if not records:
+                return
+            self._safe_put(self._compress_queue,
+                           (self._next_job, "list", records))
+            self._next_job += 1
+
+    def add_file_contents(self, file_handle, approx_block_size,
+                          terminator=b"\n", length_prefixed=None):
+        """Split the contents of file_handle into records, and write them to
+        the ZSS file.
+
+        The arguments determine how the contents of the file are divided into
+        records and blocks.
+
+        :arg file_handle: A file-like object whose contents are read. This
+          file is always closed.
+
+        :arg approx_block_size: The approximate size of each data block, in
+          bytes.
+
+        :arg terminator: A byte string containing a terminator appended to the
+          end of each record. Default is a newline.
+
+        :arg length_prefixed: If given, records are output in a
+          length-prefixed format, and ``terminator`` is ignored. Valid values
+          are the strings ``"uleb128"`` or ``"u64le"``, or None.
+
+        """
+        self._check_open()
+        with errors_close(self):
+            try:
+                if length_prefixed is None:
+                    return self._afc_terminator(file_handle,
+                                                approx_block_size,
+                                                terminator)
+                else:
+                    return self._afc_length_prefixed(file_handle,
+                                                     approx_block_size,
+                                                     length_prefixed)
+            finally:
+                file_handle.close()
+
+    def _afc_terminator(self, file_handle, approx_block_size,
+                        terminator):
+        # optimized version that doesn't process records one at a time, but
+        # instead slurps up whole chunks, resynchronizes, and leaves the
+        # compression worker to do the splitting/rejoining.
         partial_record = b""
         next_job = self._next_job
         read = file_handle.read
-        compress_queue_put = self._compress_queue.put
         while True:
-            buf = file_handle.read(self.approx_block_size)
+            buf = file_handle.read(approx_block_size)
             if not buf:
                 # File should have ended with a newline (and we don't write
                 # out the trailing empty record that this might imply).
-                assert not partial_record
-                self.close()
-                return
+                if partial_record:
+                    raise ZSSError("file did not end with terminator")
+                break
             buf = partial_record + buf
-            buf, partial_record = buf.rsplit(terminator, 1)
-            compress_queue_put((next_job, "chunk-sep", buf, terminator))
+            try:
+                buf, partial_record = buf.rsplit(terminator, 1)
+            except ValueError:
+                assert terminator not in buf
+                partial_record = buf
+                continue
+            #print "PUTTING %s" % (next_job,)
+            self._safe_put(self._compress_queue,
+                           (next_job, "chunk-sep", buf, terminator))
             next_job += 1
         self._next_job = next_job
 
-    def close(self):
-        # Stop all the processing queues and wait for them to finish.
-        sys.stderr.write("\rzss: Waiting for write thread to finish\n")
-        for i in xrange(self._parallelism):
-            self._compress_queue.put(_QUIT)
-        for compressor in self._compressors:
-            compressor.join()
-        #sys.stdout.write("All compressors finished; waiting for writer\n")
-        # All compressors have now finished their work, and submitted
-        # everything to the write queue.
-        self._write_queue.put(_QUIT)
-        self._writer.join()
+    def _afc_length_prefixed(self, file_handle, approx_block_size,
+                             length_prefixed):
+        records = []
+        this_block_size = 0
+        for record in read_length_prefixed(file_handle, length_prefixed):
+            records.append(record)
+            this_block_size += len(record)
+            if this_block_size >= approx_block_size:
+                self.add_data_block(records)
+                records = []
+                this_block_size = 0
+        if records:
+            self.add_data_block(records)
+
+    def finish(self):
+        """Declare this file finished.
+
+        This method writes out the root block, updates the header, etc.
+
+        Importantly, we do not write out the correct magic number until this
+        method completes, so no ZSS reader will be willing to read your file
+        until this is called (see :ref:`magic-numbers`).
+
+        Do not call this method unless you are sure you have added the right
+        records. (In particular, you definitely don't want to call this from a
+        ``finally`` block, or automatically from a 'with' block context
+        manager.)
+
+        Calls close().
+
+        """
+        self._check_open()
+        with errors_close(self):
+            # Stop all the processing queues and wait for them to finish.
+            sys.stderr.write("\rzss: Waiting for write thread to finish\n")
+            for i in xrange(self._parallelism):
+                self._safe_put(self._compress_queue, _QUIT)
+            for compressor in self._compressors:
+                self._safe_join(compressor)
+            #sys.stdout.write("All compressors finished; waiting for writer\n")
+            # All compressors have now finished their work, and submitted
+            # everything to the write queue.
+            self._safe_put(self._write_queue, _QUIT)
+            self._safe_join(self._writer)
+        # The writer and compressors have all exited, so any errors they've
+        # encountered have definitely been enqueued.
+        self._check_error()
         sys.stderr.write("\rzss: All data written; updating header\n")
         root_index_offset, root_index_length, sha256 = self._finish_queue.get()
         sys.stderr.write("zss: Root index offset: %s\n" % (root_index_offset,))
@@ -194,61 +421,90 @@ class ZSSWriter(object):
         self._file.write(MAGIC)
         _flush_file(self._file)
         # Done!
+        self.close()
+
+    def close(self):
+        """Close the file and terminate all background processing.
+
+        Further operations on this ZSSWriter object will raise an error.
+
+        If you call this method before calling :meth:`finish`, then you will
+        not have a working ZSS file.
+        """
+        if self.closed:
+            return
+        self.closed = True
         self._file.close()
+        for worker in self._compressors + [self._writer]:
+            worker.terminate()
+            worker.join()
 
-    # Lack of a __del__ method is intentional -- if an error occurs, we want
-    # to leave a file which is obviously incomplete, rather than create a file
-    # which *looks* complete but isn't.
+    def __enter__(self):
+        return self
 
-def _compress_worker(approx_block_size, compress_fn, compress_kwargs,
-                     compress_queue, write_queue):
+    def __exit__(self, *exc_info):
+        self.close()
+
+    def __del__(self):
+        # __del__ gets called even if we error out during __init__
+        if hasattr(self, "closed"):
+            self.close()
+
+# This worker loop compresses data blocks and passes them to the write
+# worker.
+def _compress_worker(compress_fn, compress_kwargs,
+                     compress_queue, write_queue, error_queue):
     # Local variables for speed
     get = compress_queue.get
     pdr = pack_data_records
     put = write_queue.put
-    while True:
-        job = get()
-        #sys.stderr.write("compress_worker: got\n")
-        if job is _QUIT:
-            #sys.stderr.write("compress_worker: QUIT\n")
-            return
-        # XX FIXME should really have a second (slower) API where the records
-        # are encoded in some way that allows for arbitrary contents... but
-        # this will suffice for now.
-        assert job[1] == "chunk-sep"
-        idx, job_type, buf, sep = job
-        records = buf.split(sep)
-        data = pdr(records, 2 * approx_block_size)
-        zdata = compress_fn(data, **compress_kwargs)
-        #sys.stderr.write("compress_worker: putting\n")
-        put((idx, records[0], records[-1], data, zdata))
+    with errors_to(error_queue):
+        while True:
+            job = get()
+            #sys.stderr.write("compress_worker: got %r\n" % (job,))
+            if job is _QUIT:
+                #sys.stderr.write("compress_worker: QUIT\n")
+                return
+            if job[1] == "chunk-sep":
+                idx, job_type, buf, sep = job
+                records = buf.split(sep)
+                payload = pdr(records, 2 * len(buf))
+            elif job[1] == "list":
+                idx, job_type, records = job
+                payload = pdr(records)
+            else:  # pragma: no cover
+                assert False
+            zpayload = compress_fn(payload, **compress_kwargs)
+            #sys.stderr.write("compress_worker: putting\n")
+            put((idx, records[0], records[-1], payload, zpayload))
 
 def _write_worker(path, branching_factor,
                   compress_fn, compress_kwargs,
                   write_queue, finish_queue,
-                  show_spinner):
+                  show_spinner, error_queue):
     data_appender = _ZSSDataAppender(path, branching_factor,
                                      compress_fn, compress_kwargs)
     pending_jobs = {}
     wanted_job = 0
     get = write_queue.get
     write_block = data_appender.write_block
-    while True:
-        job = get()
-        #sys.stderr.write("write_worker: got\n")
-        if job is _QUIT:
-            assert not pending_jobs
-            header_info = data_appender.close_and_get_header_info()
-            finish_queue.put(header_info)
-            return
-        pending_jobs[job[0]] = job[1:]
-        while wanted_job in pending_jobs:
-            #sys.stderr.write("write_worker: writing %s\n" % (wanted_job,))
-            write_block(0, *pending_jobs[wanted_job])
-            if show_spinner and wanted_job % 100 == 0:
-                sys.stderr.write(".")
-            del pending_jobs[wanted_job]
-            wanted_job += 1
+    with errors_to(error_queue):
+        while True:
+            job = get()
+            #sys.stderr.write("write_worker: got\n")
+            if job is _QUIT:
+                assert not pending_jobs
+                header_info = data_appender.close_and_get_header_info()
+                finish_queue.put(header_info)
+                return
+            pending_jobs[job[0]] = job[1:]
+            while wanted_job in pending_jobs:
+                #sys.stderr.write("write_worker: writing %s\n" % (wanted_job,))
+                write_block(0, *pending_jobs[wanted_job])
+                if show_spinner and wanted_job % 100 == 0:
+                    sys.stderr.write(".")
+                del pending_jobs[wanted_job]
+                wanted_job += 1
 
 # This class coordinates writing actual data blocks to the file, and also
 # handles generating the index. The hope is that indexing has low enough
@@ -274,15 +530,15 @@ class _ZSSDataAppender(object):
         self._level_lengths = []
         self._hasher = hashlib.sha256()
 
-    def write_block(self, level, first_record, last_record, data, zdata):
-        if not (0 <= level <= MAX_LEVEL):
+    def write_block(self, level, first_record, last_record, payload, zpayload):
+        if not (0 <= level < FIRST_EXTENSION_LEVEL):
             raise ZSSError("invalid level %s" % (level,))
 
         if level == 0:
-            self._hasher.update(data)
+            self._hasher.update(payload)
 
         block_offset = self._file.tell()
-        block_contents = six.int2byte(level) + zdata
+        block_contents = six.int2byte(level) + zpayload
         write_uleb128(len(block_contents), self._file)
         self._file.write(block_contents)
         self._file.write(encoded_crc64xz(block_contents))
@@ -305,21 +561,15 @@ class _ZSSDataAppender(object):
         entries = self._level_entries[level]
         assert entries
         self._level_entries[level] = []
-        for i in xrange(1, len(entries)):
-            if entries[i][0] < entries[i - 1][1]:
-                raise ZSSError("non-sorted spans")
         keys = [entry[0] for entry in entries]
         offsets = [entry[2] for entry in entries]
         block_lengths = [entry[3] for entry in entries]
-        data = pack_index_records(keys, offsets, block_lengths,
-                                  # Just a random guess at average record size
-                                  # Doesn't have to be accurate, just reduces
-                                  # reallocs if it is.
-                                  self._branching_factor * 300)
-        zdata = self._compress_fn(data, **self._compress_kwargs)
+        payload = pack_index_records(keys, offsets, block_lengths)
+        zpayload = self._compress_fn(payload, **self._compress_kwargs)
         first_record = entries[0][0]
         last_record = entries[-1][1]
-        self.write_block(level + 1, first_record, last_record, data, zdata)
+        self.write_block(level + 1, first_record, last_record,
+                         payload, zpayload)
 
     def close_and_get_header_info(self):
         # We need to create index blocks referring to all dangling
@@ -344,8 +594,11 @@ class _ZSSDataAppender(object):
             # Otherwise, we are done!
             return True
 
+        if not self._level_entries:
+            raise ZSSError("cannot create empty ZSS file")
+
         while not have_root():
-            for level in xrange(MAX_LEVEL):
+            for level in xrange(FIRST_EXTENSION_LEVEL):
                 if self._level_entries[level]:
                     self._flush_index(level)
                     break
@@ -353,4 +606,4 @@ class _ZSSDataAppender(object):
         self._file.close()
         root_entry = self._level_entries[-1][0]
         return root_entry[-2:] + (self._hasher.digest(),)
-        assert False
+        assert False  # pragma: no cover

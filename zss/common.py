@@ -2,45 +2,6 @@
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
-# Compressed Sorted Sets
-# A static database for range queries on compressible data.
-
-# Data model: we have a set of variable-length opaque bitstrings. We want to
-# store them compressed, but be able to efficiently perform range queries,
-# i.e., read out all bitstrings which are in the range [low, high).
-
-# Storage model:
-#
-# Data is stored in a large, flat, file, indexed by byte offsets.
-#
-# The file has the format:
-#
-# FILE := magic HEADER BLOCK+
-# HEADER := header_data_length header_data header_data_crc64xz
-# header_data_length, header_data_crc64xz := little-endian uint64
-# header_data := (see below)
-# BLOCK := contents_length BLOCK_CONTENTS checksum
-# contents_length := uleb128
-# BLOCK_CONTENTS := block_level compress(BLOCK_DATA)
-# level := uint8
-# if level = 0x00:
-#   BLOCK_DATA := (record_length data_record)*
-# if level > 0x00:
-#   BLOCK_DATA := (record_length index_record block_offset block_length)*
-# record_length := uleb128
-# block_offset := uleb128
-# block_length := uleb128
-# data_record, index_record := arbitrary 8-bit data
-#
-# Invariants:
-# a) Given two data_records, record1 and record2, at offset n1 and n2,
-#    n1 <= n2 numerically implies that record1 <= record2 in memcmp() order
-#    (with end-of-string sorting before all other values).
-# b) For every DATA_BLOCK Bi there is a corresponding index_record Ri.
-#      Ri <= the first data_record in Bi
-#    and, for all data_records Dj that occur earlier in the file than Bi,
-#      Dj <= Ri.
-
 import zlib
 import bz2
 import struct
@@ -50,8 +11,8 @@ import zss._zss
 
 CRC_LENGTH = 8
 
-# Reserve high levels for future extensions
-MAX_LEVEL = 63
+# Reserve high levels for future extensions.
+FIRST_EXTENSION_LEVEL = 64
 
 # "ZSS", three bytes from urandom, and 2 bytes to serve as a version
 # identifier in case that turns out to be useful.
@@ -73,7 +34,7 @@ header_data_format = [
     #   "none"
     #   "deflate"
     #   "bzip2"
-    ("compression", "16s"),
+    ("codec", "16s"),
     # "<Q" giving length, then arbitrary utf8-encoded json
     ("metadata", "length-prefixed-utf8-json"),
     ]
@@ -156,11 +117,9 @@ def read_length_prefixed(f, mode):
         raise ValueError("length-prefix mode must be u64le or uleb128")
     while True:
         length = get_length(f)
-        print length
         if length is None:
             return
         record = f.read(length)
-        print record
         if len(record) != length:
             raise ValueError("%s length-prefixed file ended mid-record"
                              % (mode,))
@@ -188,3 +147,29 @@ def test_read_length_prefixed():
             == [b"", b"a", b"bb", b"c" * 0x80])
     assert_raises(ValueError, list,
                   read_length_prefixed(BytesIO("b\x02a"), "uleb128"))
+
+    assert_raises(ValueError, list,
+                  read_length_prefixed(BytesIO(), "asdfasdf"))
+
+def write_length_prefixed(f, records, mode):
+    if mode == "u64le":
+        for record in records:
+            f.write(struct.pack("<Q", len(record)))
+            f.write(record)
+    elif mode == "uleb128":
+        f.write(zss._zss.pack_data_records(records))
+    else:
+        raise ValueError("length prefixed mode must be 'uleb128' or 'u64le'")
+
+def test_write_length_prefixed():
+    from six import BytesIO
+    records = [b"", b"a", b"aaaaa", b"z" * 500]
+    for mode in ["uleb128", "u64le"]:
+        f_out = BytesIO()
+        write_length_prefixed(f_out, records, mode)
+        f_in = BytesIO(f_out.getvalue())
+        assert list(read_length_prefixed(f_in, mode)) == records
+
+    from nose.tools import assert_raises
+    assert_raises(ValueError, write_length_prefixed,
+                  BytesIO(), [], "asdfsadf")

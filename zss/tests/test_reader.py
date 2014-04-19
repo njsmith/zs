@@ -34,7 +34,7 @@ def _check_raise_helper(records, exc):
     raise exc
 
 def check_letters_zss(z, codec):
-    assert z.compression == codec
+    assert z.codec == codec
     assert z.data_sha256 == letters_sha256
     assert z.metadata == {
         u"test-data": u"letters",
@@ -205,7 +205,7 @@ def test_big_headers():
     from zss.reader import _lower_header_size_guess
     with _lower_header_size_guess():
         z = ZSS(test_data_path("letters-none.zss"))
-        assert z.compression == "none"
+        assert z.codec == "none"
         assert z.data_sha256 == letters_sha256
         assert z.metadata == {
             u"test-data": u"letters",

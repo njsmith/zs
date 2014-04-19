@@ -22,16 +22,16 @@ from .common import (ZSSError,
                      ZSSCorrupt,
                      MAGIC,
                      INCOMPLETE_MAGIC,
-                     MAX_LEVEL,
+                     FIRST_EXTENSION_LEVEL,
                      encoded_crc64xz,
                      CRC_LENGTH,
                      header_data_length_format,
                      header_data_format,
                      codecs,
                      read_n,
-                     read_format)
-from ._zss import (unpack_data_records, unpack_index_records, read_uleb128,
-                   pack_data_records)
+                     read_format,
+                     write_length_prefixed)
+from ._zss import (unpack_data_records, unpack_index_records, read_uleb128)
 from .transport import FileTransport, HTTPTransport
 
 # How much data to read from the header on our first request on slow
@@ -104,7 +104,7 @@ def _map_raw_helper(offset, block_length, raw_block, checksum,
     block_level, zdata = _check_block(offset, raw_block, checksum)
     if skip_index and block_level > 0:
         return _ZSS_MAP_SKIP
-    if block_level > MAX_LEVEL:
+    if block_level >= FIRST_EXTENSION_LEVEL:
         return _ZSS_MAP_SKIP
     return fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
 
@@ -127,20 +127,13 @@ def _dump_helper(records, start, stop, terminator, length_prefixed):
         records = records[bisect_left(records, start):]
     if stop is not None and records and records[-1] >= stop:
         records = records[:bisect_left(records, stop)]
-    if length_prefixed == "uleb128":
-        return pack_data_records(records)
-    elif length_prefixed == "u64le":
-        out = BytesIO()
-        for record in records:
-            out.write(struct.pack("<Q", len(record)))
-            out.write(record)
-        return out.getvalue()
-    elif length_prefixed is None:
+    if length_prefixed is None:
         records.append(b"")
         return terminator.join(records)
     else:
-        raise ValueError("invalid length_prefixed argument: must be "
-                         "'uleb128', 'u64le', or None")
+        out = BytesIO()
+        write_length_prefixed(out, records, length_prefixed)
+        return out.getvalue()
 
 def _validate_helper(offset, block_length, block_level, zdata, stop,
                  decompress_fn):
@@ -233,11 +226,11 @@ class ZSS(object):
 
         self._root_index_offset = header["root_index_offset"]
         self._root_index_length = header["root_index_length"]
-        compression = header["compression"].rstrip(b"\x00")
-        if compression not in codecs:
-            raise ZSSCorrupt("unrecognized compression format %r"
-                             % (compression,))
-        self._decompress = codecs[compression][-1]
+        codec = header["codec"].rstrip(b"\x00")
+        if codec not in codecs:
+            raise ZSSCorrupt("unrecognized compression codec %r"
+                             % (codec,))
+        self._decompress = codecs[codec][-1]
         # Necessary to check this to meet our guarantee that we will never
         # miss returning data that should have been returned.
         actual_length = self._transport.length()
@@ -245,8 +238,8 @@ class ZSS(object):
             raise ZSSCorrupt("file is %s bytes, but header says it should "
                              "be %s"
                              % (actual_length, header["file_total_length"]))
-        #: The compression method used on this file, as a byte string.
-        self.compression = compression
+        #: The compression codec used on this file, as a byte string.
+        self.codec = codec
         #: A strong hash of the underlying data records contained in this
         #: file. If two files have the same value here, then they are
         #: guaranteed to represent exactly the same data (i.e., return the
@@ -323,7 +316,7 @@ class ZSS(object):
             raise ZSSCorrupt("%s:%s: "
                              "expecting index block but found data block"
                              % (self._transport.name, offset))
-        if block_level > MAX_LEVEL:
+        if block_level >= FIRST_EXTENSION_LEVEL:
             raise ZSSCorrupt("%s:%s: "
                              "expecting index block but found "
                              "level %s extension block"
