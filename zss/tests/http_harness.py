@@ -39,7 +39,7 @@ def _copy_to_stdout(handle):
             break
         sys.stdout.write(byte)
 
-TCP_TIMEOUT = 5.0
+TCP_TIMEOUT = 15.0
 TCP_POLL = 0.01
 
 def wait_for_tcp(port):  # pragma: no cover
@@ -51,10 +51,11 @@ def wait_for_tcp(port):  # pragma: no cover
             continue
         else:
             s.close()
+            print("waited %s for server to come UP" % (time.time() - now,))
             break
         time.sleep(TCP_POLL)
     else:
-        raise IOError("server not listening after %s seconds" % (TIMEOUT,))
+        raise IOError("server not listening after %s seconds" % (TCP_TIMEOUT,))
 
 def wait_for_no_tcp(port):  # pragma: no cover
     now = time.time()
@@ -63,12 +64,15 @@ def wait_for_no_tcp(port):  # pragma: no cover
         try:
             s.bind(("127.0.0.1", port))
         except socket.error:
+            print("waited %s for server to come DOWN" % (time.time() - now,))
             break
         finally:
             s.close()
         time.sleep(TCP_POLL)
     else:
-        raise IOError("server still listening after %s seconds" % (TIMEOUT,))
+        subprocess.call(["ps", "-A", "fwwwww"])
+        subprocess.call(["sudo", "fuser", "-v", "-n", "tcp", str(port)])
+        raise IOError("server still listening after %s seconds" % (TCP_TIMEOUT,))
 
 def spawn_server(argv, port, **kwargs):
     process = subprocess.Popen(argv,
