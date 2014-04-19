@@ -95,9 +95,11 @@ def shutdown_server(process_thread, name):
 @contextmanager
 def server_manager(name, argv, port, **kwargs):
     server = spawn_server(argv, port, **kwargs)
-    wait_for_tcp(port)
-    yield "http://127.0.0.1:%s/" % (port,)
-    shutdown_server(server, name)
+    try:
+        wait_for_tcp(port)
+        yield "http://127.0.0.1:%s/" % (port,)
+    finally:
+        shutdown_server(server, name)
 
 @contextmanager
 def nginx_server(root, error_exc=SkipTest):
