@@ -96,7 +96,7 @@ def test_write_mixed():
 def test_writer_args():
     with temp_zss_path() as p:
         zw = ZSSWriter(p, {"a": 1}, 2, parallelism=2, codec="deflate",
-                       compress_kwargs={"compress_level": 3},
+                       codec_kwargs={"compress_level": 3},
                        show_spinner=False, include_default_metadata=False)
         try:
             zw.add_data_block([b"a", b"b"])

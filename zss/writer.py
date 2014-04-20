@@ -108,7 +108,7 @@ def errors_close(obj):
 
 class ZSSWriter(object):
     def __init__(self, path, metadata, branching_factor,
-                 parallelism="auto", codec="bz2", compress_kwargs={},
+                 parallelism="auto", codec="bz2", codec_kwargs={},
                  show_spinner=True, include_default_metadata=True):
         """Create a ZSSWriter object.
 
@@ -129,7 +129,7 @@ class ZSSWriter(object):
 
         :arg codec: The compression method to use.
 
-        :arg compress_kwargs: kwargs to pass to the codec compress
+        :arg codec_kwargs: kwargs to pass to the codec compress
           function. Most codecs support a compress_level argument.
 
         :arg show_spinner: Whether to show the progress meter.
@@ -166,7 +166,7 @@ class ZSSWriter(object):
         try:
             fd = os.open(path, open_flags)
         except OSError as e:
-            raise ZSSError("%s: %s" % (path, e.message))
+            raise ZSSError("%s: %s" % (path, e))
         self._file = os.fdopen(fd, "w+b")
         self.metadata = dict(metadata)
         if include_default_metadata:
@@ -186,7 +186,7 @@ class ZSSWriter(object):
             raise ZSSError("unknown codec %r (should be one of: %s)"
                            % (codec, ", ".join(codecs)))
         self._compress_fn = codecs[self.codec][0]
-        self._compress_kwargs = compress_kwargs
+        self._codec_kwargs = codec_kwargs
         self._header = {
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,
@@ -216,7 +216,7 @@ class ZSSWriter(object):
         self._error_queue = multiprocessing.Queue()
         self._compressors = []
         for i in xrange(parallelism):
-            compress_args = (self._compress_fn, self._compress_kwargs,
+            compress_args = (self._compress_fn, self._codec_kwargs,
                              self._compress_queue, self._write_queue,
                              self._error_queue)
             p = multiprocessing.Process(target=_compress_worker,
@@ -225,7 +225,7 @@ class ZSSWriter(object):
             self._compressors.append(p)
         writer_args = (self._path,
                        self.branching_factor,
-                       self._compress_fn, self._compress_kwargs,
+                       self._compress_fn, self._codec_kwargs,
                        self._write_queue, self._finish_queue,
                        self._show_spinner, self._error_queue)
         self._writer = multiprocessing.Process(target=_write_worker,
@@ -449,7 +449,7 @@ class ZSSWriter(object):
 
 # This worker loop compresses data blocks and passes them to the write
 # worker.
-def _compress_worker(compress_fn, compress_kwargs,
+def _compress_worker(compress_fn, codec_kwargs,
                      compress_queue, write_queue, error_queue):
     # Local variables for speed
     get = compress_queue.get
@@ -471,16 +471,16 @@ def _compress_worker(compress_fn, compress_kwargs,
                 payload = pdr(records)
             else:  # pragma: no cover
                 assert False
-            zpayload = compress_fn(payload, **compress_kwargs)
+            zpayload = compress_fn(payload, **codec_kwargs)
             #sys.stderr.write("compress_worker: putting\n")
             put((idx, records[0], records[-1], payload, zpayload))
 
 def _write_worker(path, branching_factor,
-                  compress_fn, compress_kwargs,
+                  compress_fn, codec_kwargs,
                   write_queue, finish_queue,
                   show_spinner, error_queue):
     data_appender = _ZSSDataAppender(path, branching_factor,
-                                     compress_fn, compress_kwargs)
+                                     compress_fn, codec_kwargs)
     pending_jobs = {}
     wanted_job = 0
     get = write_queue.get
@@ -508,7 +508,7 @@ def _write_worker(path, branching_factor,
 # overhead that handling it in serial with the actual writes won't create a
 # bottleneck...
 class _ZSSDataAppender(object):
-    def __init__(self, path, branching_factor, compress_fn, compress_kwargs):
+    def __init__(self, path, branching_factor, compress_fn, codec_kwargs):
         self._file = open(path, "ab")
         # Opening in append mode should put us at the end of the file, but
         # just in case...
@@ -517,7 +517,7 @@ class _ZSSDataAppender(object):
 
         self._branching_factor = branching_factor
         self._compress_fn = compress_fn
-        self._compress_kwargs = compress_kwargs
+        self._codec_kwargs = codec_kwargs
         # For each level, a list of entries
         # each entry is a tuple (first_record, last_record, offset)
         # last_record is kept around to ensure that records at each level are
@@ -562,7 +562,7 @@ class _ZSSDataAppender(object):
         offsets = [entry[2] for entry in entries]
         block_lengths = [entry[3] for entry in entries]
         payload = pack_index_records(keys, offsets, block_lengths)
-        zpayload = self._compress_fn(payload, **self._compress_kwargs)
+        zpayload = self._compress_fn(payload, **self._codec_kwargs)
         first_record = entries[0][0]
         last_record = entries[-1][1]
         self.write_block(level + 1, first_record, last_record,
