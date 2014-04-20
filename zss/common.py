@@ -27,7 +27,7 @@ header_data_format = [
     # The length of the top-level index block.
     ("root_index_length", "<Q"),
     # The total length of this file (necessary for detecting truncation)
-    ("file_total_length", "<Q"),
+    ("total_file_length", "<Q"),
     # sha256(concat(all data blocks)), to let us uniquely identify archives
     ("sha256", "32s"),
     # A null-padded code for the storage algorithm used. So far:

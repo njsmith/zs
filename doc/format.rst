@@ -155,6 +155,8 @@ should generally check for the ``SSZ`` magic, and if encountered,
 provide a more informative error message while rejecting the file.
 
 
+.. _format-header:
+
 Header
 ''''''
 

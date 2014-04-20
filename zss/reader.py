@@ -195,9 +195,11 @@ class ZSS(object):
 
     :arg path: A string containing an on-disk file to be opened. Exactly one
       of ``path`` or ``url`` must be specified.
+
     :arg url: An HTTP (or HTTPS) URL pointing to a .zss file, which will be
       accessed directly from the server. The server must support Range:
       queries. Exactly one of ``path`` or ``url`` must be specified.
+
     :arg parallelism: When querying a ZSS file, there are always at least 2
       threads working in parallel: the main thread, where you iterate over the
       results and presumably do something with them, and a second thread used
@@ -207,11 +209,13 @@ class ZSS(object):
       perform decompression and other such tasks in serial in your main
       thread, then uses ``parallelism=0``. The default of ``parallelism="auto"
       means to spawn one worker process per available CPU.
+
     :arg index_block_cache: The number of index blocks to keep cached in
       memory. This speeds up repeated queries. Larger values provide better
       caching, but take more memory. Usually you'll want this to at least be
       as large as the depth of your .zss file's index tree, to ensure that the
       root block stays cached.
+
     """
     def __init__(self, path=None, url=None,
                  parallelism="auto", index_block_cache=32):
@@ -224,20 +228,24 @@ class ZSS(object):
 
         header = self._get_header()
 
-        self._root_index_offset = header["root_index_offset"]
-        self._root_index_length = header["root_index_length"]
+        #: The file offset of the root index block. (See :ref:`format-header`.)
+        self.root_index_offset = header["root_index_offset"]
+        #: The length of the root index block. (See :ref:`format-header`.)
+        self.root_index_length = header["root_index_length"]
         codec = header["codec"].rstrip(b"\x00")
         if codec not in codecs:
             raise ZSSCorrupt("unrecognized compression codec %r"
                              % (codec,))
         self._decompress = codecs[codec][-1]
+        #: The proper length of this file, as stored in the header.
+        self.total_file_length = header["total_file_length"]
         # Necessary to check this to meet our guarantee that we will never
         # miss returning data that should have been returned.
         actual_length = self._transport.length()
-        if actual_length != header["file_total_length"]:
+        if actual_length != self.total_file_length:
             raise ZSSCorrupt("file is %s bytes, but header says it should "
                              "be %s"
-                             % (actual_length, header["file_total_length"]))
+                             % (actual_length, self.total_file_length))
         #: The compression codec used on this file, as a byte string.
         self.codec = codec
         #: A strong hash of the underlying data records contained in this
@@ -301,6 +309,21 @@ class ZSS(object):
 
         return _decode_header_data(header_encoded)
 
+    @property
+    def root_index_level(self):
+        """The level of the root index.
+
+        It takes ``root_index_level + 2`` seeks to open a ZSS file from
+        scratch and then find an arbitrary record. (When accessing a file over
+        HTTP, for "seek" read "round trip to server".) For later queries on
+        the same :class:`ZSS` object, caching should reduce this by at least
+        2.
+
+        """
+        level, _ = self._get_index_block(self.root_index_offset,
+                                         self.root_index_length)
+        return level
+
     def _get_index_block(self, offset, block_length):
         return self._index_block_lru.lru_call(self._get_index_block_impl,
                                               offset, block_length)
@@ -339,8 +362,8 @@ class ZSS(object):
     # round_down=True we return the "f" block, and if round_down=False we
     # return None.
     def _find_ge_block(self, needle, round_down):
-        offset = self._root_index_offset
-        block_length = self._root_index_length
+        offset = self.root_index_offset
+        block_length = self.root_index_length
         while True:
             block_level, values = self._get_index_block(offset, block_length)
 
@@ -575,9 +598,12 @@ class ZSS(object):
             rt.join()
 
     def sloppy_block_search(self, start=None, stop=None, prefix=None):
-        """Finds all blocks which might contain records matching given
-        arguments.  See :meth:`search` for a definition of ``start``,
-        ``stop``, ``match``.
+        """Finds all data blocks which might contain records matching given
+        arguments. See :meth:`search` for definition of ``start``, ``stop``,
+        ``match``.
+
+        This isn't terribly useful on its own, but it can be helpful in
+        debugging the use of :meth:`sloppy_block_map`.
 
         """
         # This does decompression in the worker, and unpacking in the main
@@ -596,6 +622,24 @@ class ZSS(object):
 
     def sloppy_block_map(self, fn, start=None, stop=None, prefix=None,
                          args=(), kwargs={}):
+        """Apply a given function to all data blocks that contain records
+        matching the given arguments.
+
+        Using this method (or its friend, :meth:`sloppy_block_exec`) is the
+        best way to perform large bulk operations on ZSS files.
+
+        This function calls the given function, with the ``args`` and
+        ``kwargs``, on all data blocks that contain records which match the
+        given
+
+          def sloppy_block_map(self, fn, start=None, stop=None, prefix=None,
+                               args=(), kwargs=()):
+              for block in self.sloppy_block_search(start, stop, prefix):
+                  yield fn(block, *args, **kwargs)
+
+        However,
+
+        """
         # NB in the docs: anything you return from this fn has to be pickled
         # and then unpickled. So if you're going to be looking at records in
         # detail in the main process, then it's probably better to use the
@@ -763,15 +807,15 @@ class ZSS(object):
                                    block_length))
 
         # check the root block
-        root_ref = unref_blocks_by_offset.pop(self._root_index_offset, None)
+        root_ref = unref_blocks_by_offset.pop(self.root_index_offset, None)
         if root_ref is None:
-            add_fail(self._root_index_offset,
+            add_fail(self.root_index_offset,
                      "root block missing or doubly-referenced")
         else:
-            if root_ref.block_length != self._root_index_length:
-                add_fail(self._root_index_offset,
+            if root_ref.block_length != self.root_index_length:
+                add_fail(self.root_index_offset,
                          "wrong root index length in header (%s != %s)"
-                         % (self._root_index_length, root_ref.block_length))
+                         % (self.root_index_length, root_ref.block_length))
 
         for offset in unref_blocks_by_offset:
             add_fail(offset, "unreferenced block")

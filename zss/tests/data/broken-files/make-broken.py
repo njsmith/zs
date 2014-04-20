@@ -44,9 +44,9 @@ class SimpleWriter(object):
         self._header = {
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,
-            "file_total_length": 0,
+            "total_file_length": 0,
             "sha256": b"\x00" * 32,
-            "compression": codec_name,
+            "codec": codec_name,
             "metadata": metadata,
             }
         self._header_extra = header_extra
@@ -102,7 +102,7 @@ class SimpleWriter(object):
     def close(self, header_overrides={}):
         assert self._have_root
         self.f.seek(0, 2)
-        self._header["file_total_length"] = self.f.tell()
+        self._header["total_file_length"] = self.f.tell()
         self._header["sha256"] = self.hasher.digest()
         self._header.update(header_overrides)
         encoded_header = _encode_header(self._header) + self._header_extra
@@ -284,7 +284,7 @@ with SimpleWriter("empty-index.zss") as w:
 
 with SimpleWriter("bad-total-length.zss") as w:
     w.minimal()
-    w.close({"file_total_length": 10 ** 10})
+    w.close({"total_file_length": 10 ** 10})
 
 with SimpleWriter("bad-sha256.zss") as w:
     w.minimal()
@@ -303,14 +303,14 @@ with SimpleWriter("root-checksum.zss") as w:
 with SimpleWriter("header-checksum.zss", bad_header_checksum=True) as w:
     w.minimal()
 
-# file_total_length header field is correct, but root_index_length points past
+# total_file_length header field is correct, but root_index_length points past
 # end of file.
 with SimpleWriter("short-root.zss") as w:
     o1, l1 = w.data_block(["a", "b"])
     ro, rl = w.index_block(1, ["a"], [o1], [l1])
     w.set_root(ro, rl + 1)
 
-# file_total_length and root_index_length correctly point to a block that has
+# total_file_length and root_index_length correctly point to a block that has
 # been truncated before being written.
 with SimpleWriter("truncated-root.zss") as w:
     o1, l1 = w.data_block(["a", "b"])

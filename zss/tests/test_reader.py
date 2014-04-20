@@ -7,7 +7,7 @@ import os.path
 import sys
 import hashlib
 
-from six import int2byte, byte2int, BytesIO
+from six import int2byte, byte2int, BytesIO, integer_types
 from nose.tools import assert_raises
 
 from .util import test_data_path
@@ -34,14 +34,20 @@ def _check_raise_helper(records, exc):
     raise exc
 
 def check_letters_zss(z, codec):
+    assert isinstance(z.root_index_offset, integer_types)
+    assert isinstance(z.root_index_length, integer_types)
+    assert isinstance(z.total_file_length, integer_types)
     assert z.codec == codec
     assert z.data_sha256 == letters_sha256
     assert z.metadata == {
         u"test-data": u"letters",
-        u"build-user": u"test-user",
-        u"build-host": u"test-host",
-        u"build-time": u"2000-01-01T00:00:00.000000Z",
+        u"build-info": {
+            u"user": u"test-user",
+            u"host": u"test-host",
+            u"time": u"2000-01-01T00:00:00.000000Z",
+            },
         }
+    assert isinstance(z.root_index_level, integer_types)
 
     assert list(z) == letters_records
     assert list(z.search()) == letters_records
@@ -209,10 +215,12 @@ def test_big_headers():
         assert z.data_sha256 == letters_sha256
         assert z.metadata == {
             u"test-data": u"letters",
-            u"build-user": u"test-user",
-            u"build-host": u"test-host",
-            u"build-time": u"2000-01-01T00:00:00.000000Z",
-        }
+            u"build-info": {
+                u"user": u"test-user",
+                u"host": u"test-host",
+                u"time": u"2000-01-01T00:00:00.000000Z",
+                },
+            }
         assert list(z) == letters_records
 
 def test_broken_files():

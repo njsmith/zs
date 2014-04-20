@@ -56,7 +56,7 @@ def test__encode_header():
     got = _encode_header({
         "root_index_offset": 0x1234567890123456,
         "root_index_length": 0x2468864213577531,
-        "file_total_length": 0x0011223344556677,
+        "total_file_length": 0x0011223344556677,
         "sha256": b"abcdefghijklmnopqrstuvwxyz012345",
         "codec": "superzip",
         "metadata": {"this": "is", "awesome": 10},
@@ -153,10 +153,6 @@ class ZSSWriter(object):
         fixed terminator that you can be sure never occurs within a record
         itself.
 
-        This object uses a highly optimized and somewhat fragile
-        multiprocessing strategy. Don't be surprised if the way it reports an
-        error is to dump a message to the console and then hang...
-
         """
 
         self._path = path
@@ -174,10 +170,11 @@ class ZSSWriter(object):
         self._file = os.fdopen(fd, "w+b")
         self.metadata = dict(metadata)
         if include_default_metadata:
-            self.metadata.setdefault("build-user", getpass.getuser())
-            self.metadata.setdefault("build-host", socket.getfqdn())
-            self.metadata.setdefault("build-time",
-                                     datetime.utcnow().isoformat() + "Z")
+            build_info = {"user": getpass.getuser(),
+                          "host": socket.getfqdn(),
+                          "time": datetime.utcnow().isoformat() + "Z",
+                          }
+            self.metadata.setdefault("build-info", build_info)
         self.branching_factor = branching_factor
         self._show_spinner = show_spinner
         if parallelism == "auto":
@@ -193,7 +190,7 @@ class ZSSWriter(object):
         self._header = {
             "root_index_offset": 2 ** 63 - 1,
             "root_index_length": 0,
-            "file_total_length": 0,
+            "total_file_length": 0,
             "sha256": b"\x00" * 32,
             "codec": self.codec,
             "metadata": self.metadata,
@@ -404,7 +401,7 @@ class ZSSWriter(object):
         self._header["sha256"] = sha256
         # And can get the total file length
         self._file.seek(0, 2)
-        self._header["file_total_length"] = self._file.tell()
+        self._header["total_file_length"] = self._file.tell()
         new_encoded_header = _encode_header(self._header)
         self._file.seek(len(MAGIC))
         # Read the header length and make sure it hasn't changed

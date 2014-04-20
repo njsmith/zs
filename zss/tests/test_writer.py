@@ -3,6 +3,7 @@
 # See file LICENSE.txt for license information.
 
 from contextlib import contextmanager
+import math
 
 from six import BytesIO
 from nose.tools import assert_raises
@@ -10,6 +11,8 @@ from nose.tools import assert_raises
 from zss import ZSS, ZSSWriter, ZSSError
 from zss.common import write_length_prefixed
 from .util import tempname
+
+# some of these helpers also used in test_cmdline to test 'make'
 
 # Each of these records is 25 bytes long
 records = []
@@ -205,6 +208,10 @@ def test_lengths():
 
                 with ok_zss(p) as z:
                     assert list(z) == records
+                    assert (max(math.ceil(math.log(num_blocks)
+                                          / math.log(branching_factor)),
+                                1)
+                            == z.root_index_level)
 
 def test_clogged_queue():
     # Failure to sort across blocks causes an error in the write worker, which
