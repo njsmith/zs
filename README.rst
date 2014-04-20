@@ -48,6 +48,7 @@ Dependencies:
   * Python packages:
     * six
     * requests
+    * docopt
 
 Optional dependencies:
   * nose: needed to run tests

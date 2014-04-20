@@ -36,6 +36,14 @@ setup(
     long_description=LONG_DESC,
     author="Nathaniel J. Smith",
     author_email="njs@pobox.com",
+    url="https://github.com/njsmith/zss",
+    classifiers =
+      [ "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: BSD License",
+        "Programming Language :: Python :: 2",
+        ],
     packages=find_packages(),
     # This means, just install *everything* you see under zss/, even if it
     # doesn't look like a source file, so long as it appears in MANIFEST.in:
@@ -57,14 +65,11 @@ setup(
                                         "data/broken-files",
                                         "data/http-test",
                                     ]},
-    url="https://github.com/njsmith/zss",
-    install_requires=["six", "requests"],
-    classifiers =
-      [ "Development Status :: 4 - Beta",
-        "Intended Audience :: Developers",
-        "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: BSD License",
-        "Programming Language :: Python :: 2",
-        ],
+    entry_points={
+        "console_scripts": [
+            "zss = zss.cmdline.main:entrypoint",
+            ],
+    },
+    install_requires=["six", "requests", "docopt"],
     ext_modules=ext_modules,
 )
