@@ -16,12 +16,18 @@ real work. For an overview of usage, you can use ``zss --help``:
 
 .. command-output:: zss --help
 
+Each subcommand is further documented below.
+
 .. _zss make:
 
 ``zss make``
 ------------
 
 ``zss make`` allows you to create ZSS files.
+
+Full options:
+
+.. command-output:: zss make --help
 
 .. _zss dump:
 
@@ -33,22 +39,28 @@ inverse of ``zss make``. In the simplest case, it simply dumps the
 whole file to standard output, with one record per line. But it has
 further options that allow you to specify where the output should be
 placed, how it should be formatted, and to select a specific subset of
-the data:
+the data.
+
+Full options:
 
 .. command-output:: zss dump --help
 
-For example,
+.. _zss info:
 
-.. _zss make:
-
-.. _zss info
-
-``zss dump``
+``zss info``
 ------------
 
+``zss info`` displays some general information about a ZSS file. It is
+fast, because it looks at only the header and the root index; it
+doesn't have to uncompress the actual data.
 
+Example:
 
-``zss make``
+.. command-output:: zss info
+
+.. _zss validate:
+
+``zss validate``
 ------------
 
 This is the command used to

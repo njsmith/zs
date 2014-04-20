@@ -712,6 +712,9 @@ class ZSS(object):
 
         On Python 3, ``out_file`` must be opened in binary mode.
 
+        For a convenient command-line interface to this method, see :ref:`zss
+        dump`.
+
         """
         self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
@@ -730,6 +733,9 @@ class ZSS(object):
         all cases of incorrectly constructed files.
 
         This reads and decompresses the entire file, so may take some time.
+
+        For a convenient command-line interface to this method, see :ref:`zss
+        validate`.
 
         """
         self._check_closed()
