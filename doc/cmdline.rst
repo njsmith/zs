@@ -4,17 +4,20 @@ The command-line ``zss`` tool
 The ``zss`` tool can be used from the command-line to create, view,
 and check ZSS files.
 
-In case you have the Python ``zss`` library installed, but somehow do
+In case you have the Python ``zss`` package installed, but somehow do
 not have the ``zss`` executable, it can also be invoked as ``python -m
 zss``. E.g., these two commands do the same thing::
 
-    zss dump myfile.zss
-    python -m zss dump myfile.zss
+    $ zss dump myfile.zss
+    $ python -m zss dump myfile.zss
 
 ``zss`` provides a number of 'subcommands' which are used to do the
 real work. For an overview of usage, you can use ``zss --help``:
 
 .. command-output:: echo $PATH
+   :shell:
+
+.. command-output:: pwd
    :shell:
 
 .. command-output:: which zss
