@@ -15,6 +15,16 @@
 import sys
 import os
 
+# On readthedocs.org, the doc build is run inside a virtualenv, with zss
+# installed, but the virtualenv bin/ dir is not on the path, so by default the
+# 'zss' command is not available to the programoutput extension. But we want
+# it to be. So fix that:
+if hasattr(sys, "real_prefix"):
+    # we're in a virtualenv and sys.prefix points to the virtualenv
+    # directory. See:
+    #     https://stackoverflow.com/questions/1871549/python-determine-if-running-inside-virtualenv
+    os.environ["PATH"] = "%s/bin:%s" (sys.prefix, os.environ["PATH"])
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.

@@ -23,6 +23,9 @@ real work. For an overview of usage, you can use ``zss --help``:
 .. command-output:: which zss
    :shell:
 
+.. command-output:: python -c 'import sys; print sys.prefix'
+   :shell:
+
 .. command-output:: zss --help
 
 Each subcommand is further documented below.
