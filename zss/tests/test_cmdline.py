@@ -10,13 +10,16 @@
 import sys
 import subprocess
 import os
+import os.path
 from collections import namedtuple
 from contextlib import contextmanager
 import json
 import binascii
+from unittest.case import SkipTest
 
 from six import BytesIO
 
+import zss
 from zss import ZSS, ZSSWriter
 from .util import tempname, test_data_path
 from .http_harness import web_server
@@ -28,8 +31,8 @@ RunResult = namedtuple("RunResult", ["returncode", "stdout", "stderr"])
 # sure that setup.py does install the 'zss' script.
 CMD = [sys.executable, "-m", "zss"]
 
-def run(args, expected_returncode=0, input=b""):
-    p = subprocess.Popen(CMD + args,
+def run(args, expected_returncode=0, input=b"", zss_cmd=CMD):
+    p = subprocess.Popen(zss_cmd + args,
                          stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
@@ -238,3 +241,17 @@ def test_make():
             run(["make", "-", p, "--metadata", "{"],
                 input=NEWLINE_RECORDS,
                 expected_returncode=2)
+
+def test_script_entry_point():
+    # the above tests are all run using "python -m zss foo"; this tests that
+    # "zss foo" also works -- but only if we are actually installed.
+    expected = run(["--help"]).stdout
+    try:
+        got = run(["--help"], zss_cmd=["zss"]).stdout
+    except OSError:
+        if "ZSS_REQUIRE_SCRIPT_TEST" in os.environ:
+            raise
+        else:
+            raise SkipTest("'zss' script not found")
+
+    assert expected == got

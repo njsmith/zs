@@ -15,6 +15,8 @@ install:
   - pip install ../dist/*
   - INSTALLDIR=$(python -c "import os; import zss; print(os.path.dirname(zss.__file__))")
 script:
+  # tell the tests that missing the 'zss' script is a hard-error
+  - export ZSS_REQUIRE_SCRIPT_TEST=1
   # The --exe is because python sometimes marks all installed modules
   # as executable, so without --exe nosetests will just ignore
   # everything. Baffling, but so it goes.
