@@ -14,6 +14,12 @@ zss``. E.g., these two commands do the same thing::
 ``zss`` provides a number of 'subcommands' which are used to do the
 real work. For an overview of usage, you can use ``zss --help``:
 
+.. command-output:: echo $PATH
+   :shell:
+
+.. command-output:: which zss
+   :shell:
+
 .. command-output:: zss --help
 
 Each subcommand is further documented below.
@@ -61,8 +67,8 @@ Example:
 .. _zss validate:
 
 ``zss validate``
-------------
+----------------
 
 This is the command used to
 
-.. programoutput::
+.. command-output:: zss validate --help
