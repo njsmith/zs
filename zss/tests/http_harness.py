@@ -43,7 +43,7 @@ def find_port():
     # un-bindable even after the process that was using it goes away:
     #   http://hea-www.harvard.edu/~fine/Tech/addrinuse.html
     # So, merely waiting for the web server process to exit does not mean that
-    # its socket can be reused. Instead, we should pick a nice clean port
+    # its socket can be reused. Instead, we must pick a nice clean port
     # from scratch each time.
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         # Get the kernel to assign a port.
@@ -55,18 +55,16 @@ def find_port():
         # that race condition is unavoidable.)
         return s.getsockname()[1]
 
-def wait_for_tcp(port, timeout=10.0, poll_wait=0.01):  # pragma: no cover
+def wait_for_http(url, timeout=10.0, poll_wait=0.01):  # pragma: no cover
     start = time.time()
     while time.time() - start < timeout:
         try:
-            s = socket.create_connection(("127.0.0.1", port))
-        except socket.error:
-            continue
+            requests.head(url)
+        except requests.ConnectionError:
+            time.sleep(poll_wait)
         else:
-            s.close()
             print("waited %s for server to come UP" % (time.time() - start,))
             break
-        time.sleep(poll_wait)
     else:
         raise IOError("server not listening after %s seconds" % (timeout,))
 
@@ -96,8 +94,9 @@ def shutdown_server(process_thread, name):
 def server_manager(name, argv, port, **kwargs):
     server = spawn_server(argv, port, **kwargs)
     try:
-        wait_for_tcp(port)
-        yield "http://127.0.0.1:%s/" % (port,)
+        url = "http://127.0.0.1:%s/" % (port,)
+        wait_for_http(url)
+        yield url
     finally:
         shutdown_server(server, name)
 
