@@ -82,12 +82,24 @@ def box_exception():
 
 def reraise_boxed(box):
     e_type, e_obj, extracted_tb = box
-    # XX this is super-lazy, but at least it will usually get the job done...
-    sys.stderr.writelines(traceback.format_list(extracted_tb))
-    raise e_obj
+    orig_tb_str = "".join(traceback.format_list(extracted_tb))
+    raise ZSSError("Error in worker: %s\n\n"
+                   "(Original traceback:\n"
+                   "    %s"
+                   "    %s: %s\n"
+                   ")"
+                   % (e_obj,
+                      orig_tb_str.replace("\n", "\n    "),
+                      e_type.__name__,
+                      e_obj,
+                      )
+                  )
 
 # We have a very strict policy on exceptions: any exception anywhere in
 # ZSSWriter is non-recoverable.
+
+# This context manager is wrapped around all out-of-process code, to ship
+# errors back to the main process.
 @contextmanager
 def errors_to(q):
     try:
@@ -98,6 +110,8 @@ def errors_to(q):
         # a chance to know that the child is dead.
         q.put(box_exception())
 
+# This context manager is wrapped around in-process code, to catch errors and
+# enforce non-recoverability.
 @contextmanager
 def errors_close(obj):
     try:
@@ -379,7 +393,7 @@ class ZSSWriter(object):
         self._check_open()
         with errors_close(self):
             # Stop all the processing queues and wait for them to finish.
-            sys.stderr.write("\rzss: Waiting for write thread to finish\n")
+            sys.stdout.write("\rzss: Waiting for write thread to finish\n")
             for i in xrange(self._parallelism):
                 self._safe_put(self._compress_queue, _QUIT)
             for compressor in self._compressors:
@@ -392,9 +406,9 @@ class ZSSWriter(object):
         # The writer and compressors have all exited, so any errors they've
         # encountered have definitely been enqueued.
         self._check_error()
-        sys.stderr.write("\rzss: All data written; updating header\n")
+        sys.stdout.write("\rzss: All data written; updating header\n")
         root_index_offset, root_index_length, sha256 = self._finish_queue.get()
-        sys.stderr.write("zss: Root index offset: %s\n" % (root_index_offset,))
+        sys.stdout.write("zss: Root index offset: %s\n" % (root_index_offset,))
         # Now we have the root offset
         self._header["root_index_offset"] = root_index_offset
         self._header["root_index_length"] = root_index_length
@@ -499,7 +513,7 @@ def _write_worker(path, branching_factor,
                 #sys.stderr.write("write_worker: writing %s\n" % (wanted_job,))
                 write_block(0, *pending_jobs[wanted_job])
                 if show_spinner and wanted_job % 100 == 0:
-                    sys.stderr.write(".")
+                    sys.stdout.write(".")
                 del pending_jobs[wanted_job]
                 wanted_job += 1
 
