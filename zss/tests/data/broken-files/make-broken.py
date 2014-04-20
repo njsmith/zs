@@ -351,7 +351,7 @@ with SimpleWriter("good-extension-blocks.zss") as w:
     o1, l1 = w.data_block(["a", "b"])
     for i in xrange(64, 256):
         # Not really an index block, but this is the quickest way to write
-        # some gibberish with a high level to the file
+        # a block with a high level and some arbitrary payload to the file.
         w.index_block(i, ["asdf"], [0], [0])
     o2, l2 = w.data_block(["c", "d"])
     w.root_block(1, ["a", "c"], [o1, o2], [l1, l2])
