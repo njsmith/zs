@@ -56,9 +56,7 @@ Contents:
 
    cmdline.rst
 
-   read.rst
-
-   write.rst
+   library.rst
 
    metadata.rst
 
