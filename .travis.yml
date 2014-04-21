@@ -20,7 +20,7 @@ install:
 script:
   # tell the tests that missing the 'zss' script is a hard-error
   - export ZSS_REQUIRE_SCRIPT_TEST=1
-  - nosetests --all-modules --with-cov --cov-conf ./travis-coveragerc --cov-report term-missing --cov ${INSTALLDIR} zss
+  - nosetests --all-modules --with-cov --cov-conf ../.coveragerc --cov-report term-missing --cov ${INSTALLDIR} zss
 after_success:
   - pip install coveralls && coveralls
 notifications:
