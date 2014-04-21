@@ -150,7 +150,7 @@ def test_make():
                           ]:
             input = run(["dump", p_in, format_opt]).stdout
             with temp_zss_path() as p_out:
-                run(["make", format_opt, "-", p_out], input=input)
+                run(["make", format_opt, "{}", "-", p_out], input=input)
 
                 with ZSS(p_out) as z:
                     z.validate()
@@ -160,13 +160,14 @@ def test_make():
 
         # smoke test -j
         with temp_zss_path() as p_out:
-            run(["make", "-", p_out, "-j", "3"], input=NEWLINE_RECORDS)
+            run(["make", "{}", "-", p_out, "-j", "3"], input=NEWLINE_RECORDS)
 
         # --no-spinner produces less chatter
         with temp_zss_path() as p_out:
-            r1 = run(["make", "-", p_out], input=big_input)
+            r1 = run(["make", "{}", "-", p_out], input=big_input)
         with temp_zss_path() as p_out:
-            r2 = run(["make", "-", p_out, "--no-spinner"], input=big_input)
+            r2 = run(["make", "{}", "-", p_out, "--no-spinner"],
+                     input=big_input)
         assert len(r2.stdout) < len(r1.stdout)
 
         # codecs and compress level
@@ -181,7 +182,7 @@ def test_make():
                          "--codec=deflate",
                          "--codec=deflate --compress-level 1"]:
             with temp_zss_path() as p_out:
-                run(["make", "-", p_out] + settings.split(),
+                run(["make", "{}", "-", p_out] + settings.split(),
                     input=bigger_input)
                 sizes[settings] = os.stat(p_out).st_size
         assert sizes["--codec=none"] > sizes["--codec=deflate"]
@@ -196,7 +197,7 @@ def test_make():
                 args = []
                 if no_default:
                     args.append("--no-default-metadata")
-                run(["make", "-", p_out, "--metadata={\"foo\": 1}"] + args,
+                run(["make", "{\"foo\": 1}", "-", p_out] + args,
                     input=NEWLINE_RECORDS)
                 with ZSS(p_out) as z:
                     assert z.metadata["foo"] == 1
@@ -207,9 +208,9 @@ def test_make():
 
         # approx-block-size
         with temp_zss_path() as p_small, temp_zss_path() as p_big:
-            run(["make", "-", p_small, "--approx-block-size", "1000"],
+            run(["make", "{}", "-", p_small, "--approx-block-size", "1000"],
                 input=big_input)
-            run(["make", "-", p_big, "--approx-block-size", "10000"],
+            run(["make", "{}", "-", p_big, "--approx-block-size", "10000"],
                 input=big_input)
 
             with ZSS(p_small) as z_small, ZSS(p_big) as z_big:
@@ -220,10 +221,10 @@ def test_make():
 
         # branching-factor
         with temp_zss_path() as p_b2, temp_zss_path() as p_b100:
-            run(["make", "-", p_b2, "--approx-block-size", "1000",
+            run(["make", "{}", "-", p_b2, "--approx-block-size", "1000",
                  "--branching-factor", "2"],
                 input=big_input)
-            run(["make", "-", p_b100, "--approx-block-size", "1000",
+            run(["make", "{}", "-", p_b100, "--approx-block-size", "1000",
                  "--branching-factor", "100"],
                 input=big_input)
 
@@ -235,7 +236,7 @@ def test_make():
         with tempname(".txt") as in_p, temp_zss_path() as out_p:
             with open(in_p, "wb") as in_f:
                 in_f.write(big_input)
-            run(["make", in_p, out_p])
+            run(["make", "{}", in_p, out_p])
 
             with ZSS(out_p) as z:
                 assert list(z) == big_records
@@ -244,12 +245,12 @@ def test_make():
         for opt in ["--branching-factor", "--approx-block-size",
                     "--compress-level", "-z"]:
             with temp_zss_path() as p:
-                run(["make", "-", p, opt, "NOT-AN-INT"],
+                run(["make", "{}", "-", p, opt, "NOT-AN-INT"],
                     input=NEWLINE_RECORDS,
                     expected_returncode=2)
         # bad json
         with temp_zss_path() as p:
-            run(["make", "-", p, "--metadata", "{"],
+            run(["make", "{}", "-", p, "--metadata", "{"],
                 input=NEWLINE_RECORDS,
                 expected_returncode=2)
 

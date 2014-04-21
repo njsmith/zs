@@ -47,13 +47,13 @@ Reading ZSS files is accomplished by instantiating an object of type
 
 .. autoclass:: ZSS
 
-   **Basic searches**
+   .. rubric:: Basic searches
 
    .. automethod:: search
 
    .. automethod:: __iter__
 
-   **Metadata access**
+   .. rubric:: Metadata access
 
    This class provides a number of read-only attributes that give
    general information about the ZSS file:
@@ -101,13 +101,13 @@ Reading ZSS files is accomplished by instantiating an object of type
    .. autoattribute:: root_index_level
       :annotation:
 
-   **Fast bulk operations for experts**
+   .. rubric:: Fast bulk operations for experts
 
    .. automethod:: block_map
 
    .. automethod:: block_exec
 
-   **High-level operations**
+   .. rubric:: High-level operations
 
    .. automethod:: dump
 

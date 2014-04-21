@@ -31,21 +31,22 @@ number of advantages over these traditional formats.
   letters "th". Decompressing this file alone takes 30-40 minutes on a
   fast compuer. But with the same ZSS file described above, XX
 
-* ZSS files are **really, really fast**: Suppose we want to know how
-  many times "this is fun" was used in a Google-scanned book in 1955
-  in the USA. ZSS files have a limited indexing ability that lets you
-  quickly locate any arbitrary span of records (= lines) that fall
-  within a given sorted range, or share a certain textual prefix. This
-  isn't as nice as a full-fledged database system that can query on
-  any column, but it can be extremely useful for data sets where the
-  first column (or first several columns) are usually used for
-  lookup. In our example file, finding the "this is fun" entry takes
-  XX disk seeks and less than XX milliseconds of CPU time -- call it
-  XX ms all told. (Turns out it was used 27 times.) With a gzipped
-  text file, the only way to locate an individual record, or span of
-  similar records, is start decompressing the file from the beginning
-  and wait until the records we want scroll by, which again takes
-  anywhere up to 40 minutes. In this case, ZSS is >XX times faster.
+* ZSS files are **really, REALLY fast**: Suppose we want to know how
+  many times the phrase "this is fun" was used in a Google-scanned
+  book in 1955 in the USA. ZSS files have a limited indexing ability
+  that lets you quickly locate any arbitrary span of records (= lines)
+  that fall within a given sorted range, or share a certain textual
+  prefix. This isn't as nice as a full-fledged database system that
+  can query on any column, but it can be extremely useful for data
+  sets where the first column (or first several columns) are usually
+  used for lookup. In our example file, finding the "this is fun"
+  entry takes XX disk seeks and less than XX milliseconds of CPU time
+  -- call it XX ms all told. (Turns out it was used 27 times.) With a
+  gzipped text file, the only way to locate an individual record, or
+  span of similar records, is start decompressing the file from the
+  beginning and wait until the records we want scroll by, which again
+  takes anywhere up to 40 minutes. In this case, ZSS is >XX times
+  faster.
 
 * ZSS files contain **rich metadata**: In addition to the raw data
   records, every ZSS file contains a set of structured metadata
@@ -63,16 +64,24 @@ number of advantages over these traditional formats.
   terabytes of data; given a URL to the file, the ZSS tools can
   efficiently locate and fetch just the parts of the file you need.
 
-* ZSS files are **vigilant against error**: Computer hardware is
-  simply not reliable, especially on scales of years and
-  terabytes. Standard text files provide no way to detect data
-  corruption; gzip provides some protection, but it's only guaranteed
-  to work if you read the entire file from start to finish, every
-  time, and then check the error code. ZSS, by contrast, protects
-  every bit of data with 64-bit CRC checksums, and validates these on
-  every access (the cost of this is included in the times quoted
-  above). If it matters to you whether your analysis gets the right
-  answer, then ZSS is a good choice.
+* ZSS files are **ever-vigilant**: Computer hardware is simply not
+  reliable, especially on scales of years and terabytes. Standard text
+  files provide no way to detect data corruption; gzip provides some
+  protection, but it's only guaranteed to work if you read the entire
+  file from start to finish, every time, and then check the error
+  code. ZSS, by contrast, protects every bit of data with 64-bit CRC
+  checksums, and validates these on every access (the cost of this is
+  included in the times quoted above). If it matters to you whether
+  your analysis gets the right answer, then ZSS is a good choice.
+
+* Relying on the ZSS format creates **minimal risk**: The ZSS file
+  format is simple and :ref:`fully documented <format>`_; an average
+  programmer with access to standard libraries could write a
+  functional decompressor in a few hours. The reference implementation
+  is BSD-licensed, undergoes exhaustive automated testing (~99%
+  coverage) after every checkin, and includes a complete file format
+  validator, so you can be sure confirm that your files match the spec
+  and will be readable by any compliant implementation.
 
 * ZSS files have a name **composed entirely of sibilants**: How many
   file formats can say *that*?

@@ -12,23 +12,35 @@ def command_make(opts):
     """Create a new .zss file.
 
 Usage:
-  zss make <input_file> <new_zss_file>
+  zss make <metadata> <input_file> <new_zss_file>
   zss make [--terminator TERMINATOR | --length-prefixed=TYPE]
            [-j PARALLELISM]
            [--no-spinner]
            [--branching-factor=FACTOR]
            [--approx-block-size=SIZE]
            [--codec=CODEC] [-z COMPRESS-LEVEL]
-           [--metadata=JSON]
            [--no-default-metadata]
            [--]
-           <input_file> <new_zss_file>
+           <metadata> <input_file> <new_zss_file>
   zss make --help
 
 Arguments:
+
+  <metadata>      Arbitrary JSON-encoded metadata that will be stored in your
+                  new ZSS file. This must be a JSON "object", i.e., the
+                  outermost characters have to be {}. If you're just messing
+                  about, then you can just use "{}" here and be done, but for
+                  any file that will live for long then we strongly recommend
+                  adding more details about what this file is. See the
+                  "Metadata conventions" section of the ZSS manual for more
+                  information.
+
   <input_file>    A file containing the records to be packed into the
                   new .zss file. Use "-" for stdin. Records must already be
-                  sorted in ASCIIbetical order.
+                  sorted in ASCIIbetical order. You may want to do something
+                  like:
+                    cat myfile.txt | env LC_ALL=C sort | zss make - myfile.zss
+
   <new_zss_file>  The file to create. Conventionally uses the file extension
                   ".zss".
 
@@ -62,19 +74,17 @@ Output file options:
   -z COMPRESS-LEVEL, --compress-level=COMPRESS-LEVEL
                              Degree of compression to use. (Default: 6 for
                              deflate, 9 for bz2.)
-  --metadata=JSON            A JSON string representing an arbitrary
-                             dictionary of properties, to be stored in the
-                             file header. [default: {}]
   --no-default-metadata      By default, 'zss make' adds an extra "build-info"
                              key to the metadata, recording the time, host,
                              and user who created the file. This option
                              disables this behaviour.
-"""
+
+    """
 
     try:
-        metadata = json.loads(opts.get("--metadata", "{}"))
+        metadata = json.loads(opts["<metadata>"])
     except ValueError as e:
-        optfail("error parsing JSON string from --metadata: %s" % (e,))
+        optfail("error parsing metadata as JSON: %s" % (e,))
 
     codec_kwargs = {}
     if "__compress-level__" in opts:

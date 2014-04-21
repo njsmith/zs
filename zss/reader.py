@@ -652,7 +652,7 @@ class ZSS(object):
     def block_map(self, fn, start=None, stop=None, prefix=None,
                   args=(), kwargs={}):
         """Apply a given function -- in parallel -- to records matching a
-        given query.
+        given query. This function is lazy -- you have to iterate
 
         Using this method (or its friend, :meth:`block_exec`) is the
         best way to perform large bulk operations on ZSS files.

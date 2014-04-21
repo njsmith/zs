@@ -16,9 +16,9 @@ And it can tell you what subcommands are available:
 These subcommands are documented further below.
 
 .. note:: In case you have the Python :mod:`zss` package installed,
-  but somehow do not have the ``zss`` executable, it can also be
-  invoked as ``python -m zss``. E.g., these two commands do the same
-  thing::
+  but somehow do not have the ``zss`` executable available on your
+  path, then it can also be invoked as ``python -m zss``. E.g., these
+  two commands do the same thing::
 
       $ zss dump myfile.zss
       $ python -m zss dump myfile.zss
@@ -42,13 +42,40 @@ character):
 
 Then we can compress it into a ZSS file by running:
 
-.. command-output:: zss make tiny-4grams.txt tiny-4grams.zss
-   :cwd: example/scratch
+.. Note that if you change this command, then you should also update
+   the copy of tiny-4grams.zss that is stored in the example/
+   directory, so that the rest of the examples in the documentation
+   will match:
 
-In real life, you'll almost always want to at least use the
-``--metadata`` option to record some information on what this data set
-is (especially if you plan to redistribute it). Many other options are
-also available:
+.. command-output:: zss make '{"corpus": "doc-example"}' tiny-4grams.txt tiny-4grams.zss
+   :cwd: example/scratch
+   :shell:
+
+The first argument specifies some arbitrary metadata that will be
+saved into the ZSS file, in the form of a `JSON <http://json.org>`_
+string, the second argument names the file we want to convert, and the
+third argument names the file we want to create.
+
+.. note:: You must ensure that your file is sorted before running
+   ``zss make``. (If you don't, then it will error out and scold you.)
+   GNU sort is very useful for this task -- but don't forget to set
+   ``LC_ALL=C`` in your environment before calling sort, to make sure
+   that it uses ASCIIbetical ordering instead of something
+   locale-specific.
+
+   When your file is too large to fit into RAM, GNU sort will spill
+   the data onto disk in temporary files. When your file is too large
+   to fit onto disk, then a useful incantation is::
+
+       gunzip -c myfile.gz | env LC_ALL=C sort --compress-program=lzop \
+          | zss make "{...}" - myfile.zss
+
+   The ``--compress-program`` option tells sort to automatically
+   compress and decompress the temporary files using the ``lzop``
+   utility, so that you never end up with uncompressed data on
+   disk. (``gzip`` also works, but will be slower.)
+
+Many other options are also available:
 
 .. command-output:: zss make --help
 
@@ -64,10 +91,10 @@ also available:
 
 The most interesting part of this output might be the ``"metadata"``
 field, which contains arbitrary metadata describing the file. Here we
-see that even though we didn't supply any metadata of our own, ``zss
-make`` added some default metadata; if we wanted to suppress this we
-could have used the ``--no-default-metadata`` option. The
-``"data_sha256"`` field is, as you might expect, a `SHA-256
+see that our custom key was indeed added, and that ``zss make`` also
+added some default metadata. (If we wanted to suppress this we could
+have used the ``--no-default-metadata`` option.) The ``"data_sha256"``
+field is, as you might expect, a `SHA-256
 <https://en.wikipedia.org/wiki/SHA-256>`_ hash of the data contained
 in this file -- two ZSS files will have the same value here if and
 only if they contain exactly the same logical records, regardless of
@@ -82,9 +109,10 @@ for details.
 
 ``zss info`` is fast, even on arbitrarily large files, because it
 looks at only the header and the root index; it doesn't have to
-uncompress the actual data. You can also pass an HTTP URL directly on
-the command line, and it will download only as much of the file as it
-needs to.
+uncompress the actual data. If you find a large ZSS file on the web
+and want to see its metadata before downloading it, you can pass an
+HTTP URL to ``zss info`` directly on the command line, and it will
+download only as much of the file as it needs to.
 
 ``zss info`` doesn't take many options:
 
@@ -166,12 +194,12 @@ deflate codec, the easiest and safest way to do that is with a command
 like::
 
     $ zss dump --length-prefixed=uleb128 myfile-bz2.zss | \
-      zss make --metadata="$(zss info -m myfile-bz2.zss)" \
-          --length-prefixed=uleb128 --codec=deflate - myfile-deflate.zss
+      zss make --length-prefixed=uleb128 --codec=deflate \
+          "$(zss info -m myfile-bz2.zss)" - myfile-deflate.zss
 
-If you're using Python, of course, the easiest way to read a ZSS file
-is not to use ``zss dump`` at all, but to use the :mod:`zss` library
-API directly.
+If you're using Python, of course, the most convenient way to read a
+ZSS file is not to use ``zss dump`` at all, but to use the :mod:`zss`
+library API directly.
 
 Full options:
 
