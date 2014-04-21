@@ -103,9 +103,9 @@ class _ZSS_MAP_SKIP(object):
 def _map_raw_helper(offset, block_length, raw_block, checksum,
                     skip_index, start, stop, fn, args, kwargs):
     block_level, zpayload = _check_block(offset, raw_block, checksum)
-    if skip_index and block_level > 0:
-        return _ZSS_MAP_SKIP
     if block_level >= FIRST_EXTENSION_LEVEL:
+        return _ZSS_MAP_SKIP
+    if skip_index and block_level > 0:
         return _ZSS_MAP_SKIP
     return fn(offset, block_length, block_level, zpayload, start, stop,
               *args, **kwargs)
