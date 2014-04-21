@@ -360,6 +360,7 @@ class ZSS(object):
     # round_down=True we return the "f" block, and if round_down=False we
     # return None.
     def _find_ge_block(self, needle, round_down):
+        assert needle is not None
         offset = self.root_index_offset
         block_length = self.root_index_length
         while True:
@@ -811,7 +812,7 @@ class ZSS(object):
                            block_length))
 
         mrb = self._map_raw_block
-        with closing(mrb(None, None, False,
+        with closing(mrb(b"", None, False,
                          _validate_helper, self._decompress)) as it:
             for offset, block_length, block_level, data in it:
                 if block_level == 0:
