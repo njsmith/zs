@@ -18,6 +18,4 @@ https://matthew-brett.github.io/pydagogue/python_msvc.html
 
 ** versiontools and --version
 
-** add a validation mode that just checks the crcs, to check for uncorrupted downloads (or don't bother, since any crc failures are guaranteed to be caught on use)
-** add a test to writer that just writes, checks metadata, checks contents, and calls fsck()
-** docs
+** python 3

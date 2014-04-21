@@ -686,10 +686,6 @@ class ZSS(object):
         backtraces if (when) your ``fn`` crashes.
 
         """
-        # NB in the docs: anything you return from this fn has to be pickled
-        # and then unpickled. So if you're going to be looking at records in
-        # detail in the main process, then it's probably better to use the
-        # regular search function.
         self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         mrb = self._map_raw_block
