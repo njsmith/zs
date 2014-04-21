@@ -878,14 +878,14 @@ class ZSS(object):
         .. note:: If you have any active iterators (from :meth:`search`,
            :meth:`block_map`, etc.), then they will be closed as well. This
            means that any further attempts to iterate them will raise
-           ``StopIteration``.
+           :exc:`StopIteration`.
 
         """
+        if self._closed:
+            return
         # Slightly weird construct b/c the way garbage collection works, an
         # mrb can disappear at any time, and invalidate our iterator over
         # ._mrbs(). So safest not to use any iterator for more than one step.
-        if self._closed:
-            return
         while self._mrbs:
             for mrb in self._mrbs:
                 # This is guaranteed to work, because now *we* hold a strong
