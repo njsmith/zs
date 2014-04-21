@@ -43,6 +43,7 @@ setup(
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: BSD License",
         "Programming Language :: Python :: 2",
+        "Programming Language :: Python :: 3",
         ],
     packages=find_packages(),
     # This means, just install *everything* you see under zss/, even if it

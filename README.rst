@@ -44,7 +44,7 @@ Downloads:
   http://pypi.python.org/pypi/zss/ [TODO]
 
 Dependencies:
-  * Python 2.7 (or Py 3.3? XX check)
+  * Python 2.7, or Python 3.3+
   * Python packages:
 
     * six
