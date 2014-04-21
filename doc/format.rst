@@ -86,7 +86,7 @@ CRC. Specifically, we use the same CRC-64 calculation that the `.xz
 file format <http://tukaani.org/xz/xz-file-format.txt>`_ does. The
 `Rocksoft model <http://www.ross.net/crc/crcpaper.html>`_ parameters
 for this CRC are: polynomial = 0x42f0e1eba9ea3693, reflect in = True,
-xor in = 0xffffffffffffffff, reflect out = True, xor out =
+init = 0xffffffffffffffff, reflect out = True, xor out =
 0xffffffffffffffff, check = 0x995dc9bbdf1939fa.
 
 .. _integer-representations:
@@ -268,7 +268,7 @@ The header contains the following fields, in order:
   format. (Backwards-incompatible extensions, of course, will include
   a change to the magic number.)
 
-* CRC-64xz (``u64le``): A checksum of all the header data. This does
+* CRC-64-xz (``u64le``): A checksum of all the header data. This does
   not include the length field, but does include everything between it
   and the CRC. See diagram.
 
@@ -292,7 +292,7 @@ Blocks themselves all have the same format:
   decompressed according to the value of the codec field in the
   header, and then interpreted according to the rules below.
 
-* CRC-64xz (``u64le``): CRC of the data in the block. This does not
+* CRC-64-xz (``u64le``): CRC of the data in the block. This does not
   include the length field -- see diagram. Note that this is
   calculated directly on the raw disk representation of the block,
   compression and all.
@@ -301,7 +301,7 @@ Technically we don't need to store the length at the beginning of each
 block, because every block also has its length stored either in an
 index block or (for the root block) in the header. But, storing the
 length directly at the beginning of each block makes it much simpler
-to write simple streaming decoders, reduces seeks during streaming
+to write naive streaming decoders, reduces seeks during streaming
 reads, and adds negligible space overhead.
 
 Data block payload
