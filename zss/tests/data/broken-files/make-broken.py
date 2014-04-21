@@ -59,11 +59,11 @@ class SimpleWriter(object):
         self.f.write(encoded_crc64xz(encoded_header))
         self._have_root = False
 
-    def raw_block(self, block_level, zdata,
+    def raw_block(self, block_level, zpayload,
                   bad_checksum=False, truncate_checksum=0):
         self.f.seek(0, 2)
         offset = self.f.tell()
-        contents = int2byte(block_level) + zdata
+        contents = int2byte(block_level) + zpayload
         write_uleb128(len(contents), self.f)
         self.f.write(contents)
         checksum = encoded_crc64xz(contents)
@@ -80,14 +80,14 @@ class SimpleWriter(object):
         self.f.write(garbage)
 
     def data_block(self, records, **kwargs):
-        zdata = _pack_data_records_unchecked(records)
-        self.hasher.update(zdata)
-        return self.raw_block(0, zdata, **kwargs)
+        zpayload = _pack_data_records_unchecked(records)
+        self.hasher.update(zpayload)
+        return self.raw_block(0, zpayload, **kwargs)
 
     def index_block(self, block_level, records, offsets, block_lengths,
                     **kwargs):
-        zdata = _pack_index_records_unchecked([records, offsets, block_lengths])
-        return self.raw_block(block_level, zdata, **kwargs)
+        zpayload = _pack_index_records_unchecked([records, offsets, block_lengths])
+        return self.raw_block(block_level, zpayload, **kwargs)
 
     def root_block(self, *args, **kwargs):
         root_offset, root_length = self.index_block(*args, **kwargs)
@@ -267,14 +267,14 @@ with SimpleWriter("partial-index-1.zss") as w:
     o1, l1 = w.data_block(["a", "b"])
     assert o1 < 128
     assert l1 < 128
-    zdata = b"\x01a" + int2byte(o1) + int2byte(l1)
-    w.set_root(*w.raw_block(1, zdata[:-1]))
+    zpayload = b"\x01a" + int2byte(o1) + int2byte(l1)
+    w.set_root(*w.raw_block(1, zpayload[:-1]))
 with SimpleWriter("partial-index-2.zss") as w:
     assert w.data_block(["a", "b"]) == (o1, l1)
-    w.set_root(*w.raw_block(1, zdata[:-2]))
+    w.set_root(*w.raw_block(1, zpayload[:-2]))
 with SimpleWriter("partial-index-3.zss") as w:
     assert w.data_block(["a", "b"]) == (o1, l1)
-    w.set_root(*w.raw_block(1, zdata[:-3]))
+    w.set_root(*w.raw_block(1, zpayload[:-3]))
 with SimpleWriter("partial-index-4.zss") as w:
     assert w.data_block(["a", "b"]) == (o1, l1)
     w.set_root(*w.raw_block(1, b"0x80"))
@@ -358,4 +358,11 @@ with SimpleWriter("good-extension-blocks.zss") as w:
 
 with SimpleWriter("good-extension-header-fields.zss",
                   header_extra=b"0123456789") as w:
+    w.minimal()
+
+# the first block has to start immediately after the header
+# (early versions of the reader code didn't catch this because it always went
+# through the index)
+with SimpleWriter("post-header-junk.zss") as w:
+    w.append(b"\x00")
     w.minimal()

@@ -209,7 +209,7 @@ def test_broken_files():
     unchecked_paths = set(glob.glob(test_data_path("broken-files/*.zss")))
     # Files that should fail even on casual use (no validate)
     for basename, msg_fragment in [
-            ("short-root", "partial read"),
+            ("short-root", ["partial read", "root index length"]),
             ("truncated-root", "unexpected EOF"),
             ("bad-magic", "bad magic"),
             ("incomplete-magic", "partially written"),
@@ -220,9 +220,9 @@ def test_broken_files():
             ("truncated-data-1", "unexpectedly ran out of data"),
             ("truncated-data-2", "unexpected EOF"),
             ("truncated-data-3", "unexpected EOF"),
-            ("wrong-root-offset", "checksum mismatch"),
-            ("root-is-data", "expecting index block"),
-            ("wrong-root-level-1", "expecting index block"),
+            ("wrong-root-offset", ["checksum mismatch", "root block missing"]),
+            ("root-is-data", ["expecting index block", "bad level"]),
+            ("wrong-root-level-1", ["expecting index block", "bad index ref"]),
             ("partial-data-1", "past end of block"),
             ("partial-data-2", "end of buffer"),
             ("empty-data", "empty block"),
@@ -232,21 +232,31 @@ def test_broken_files():
             ("partial-index-4", "past end of block"),
             ("empty-index", "empty block"),
             ("bad-total-length", "header says it should"),
-            ("bad-level-root", "extension block"),
-            ("bad-level-index-2", "extension block"),
+            ("bad-level-root", ["extension block", "root block missing"]),
+            ("bad-level-index-2", ["extension block", "dangling or multiple refs"]),
+            ("post-header-junk", "checksum mismatch"),
             ]:
         print(basename)
+        def any_match(mfs, haystack):
+            if isinstance(mfs, str):
+                mfs = [mfs]
+            for mf in mfs:
+                if mf in haystack:
+                    return True
+            return False
         # to prevent accidental false success:
-        assert msg_fragment not in basename
+        assert not any_match(msg_fragment, basename)
         p = test_data_path("broken-files/%s.zss" % (basename,))
         with assert_raises(ZSSCorrupt) as cm:
             with ZSS(p) as z:
                 list(z)
-        assert msg_fragment in str(cm.exception)
+                # use start= to ensure that we do an index traversal
+                list(z.search(start=b"\x00"))
+        assert any_match(msg_fragment, str(cm.exception))
         with assert_raises(ZSSCorrupt) as cm:
             with ZSS(p) as z:
                 z.validate()
-        assert msg_fragment in str(cm.exception)
+        assert any_match(msg_fragment, str(cm.exception))
         unchecked_paths.discard(p)
 
     # Files that might look okay locally, but validate should detect problems

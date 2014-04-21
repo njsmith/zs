@@ -240,7 +240,7 @@ class ZSS(object):
         else:
             raise ValueError("exactly one of path= or url= must be given")
 
-        header = self._get_header()
+        header, self._header_end = self._get_header()
 
         self.root_index_offset = header["root_index_offset"]
         self.root_index_length = header["root_index_length"]
@@ -297,6 +297,7 @@ class ZSS(object):
         header_data_length, = read_format(stream, header_data_length_format)
 
         needed = header_data_length + CRC_LENGTH
+        header_end = stream.tell() + needed
         remaining = len(chunk) - stream.tell()
         if remaining < needed:
             rest = self._transport.chunk_read(len(chunk), needed - remaining)
@@ -308,7 +309,7 @@ class ZSS(object):
             raise ZSSCorrupt("%s: header checksum mismatch"
                              % (self._transport.name,))
 
-        return _decode_header_data(header_encoded)
+        return _decode_header_data(header_encoded), header_end
 
     @property
     def root_index_level(self):
@@ -416,8 +417,11 @@ class ZSS(object):
         # into start/stop.
         return start, stop
 
-    def _block_stream(self, start, stop):
-        start_offset = self._find_ge_block(start, True)
+    def _span_stream(self, start, stop):
+        if start == b"":
+            start_offset = self._header_end
+        else:
+            start_offset = self._find_ge_block(start, True)
         stop_offset = None
         if self._transport.remote and stop is not None:
             # This can return None. Fortunately stream_read can accept None as
@@ -577,7 +581,7 @@ class ZSS(object):
         return gen
 
     def _map_raw_block_gen(self, start, stop, skip_index, fn, *args, **kwargs):
-        stream = self._block_stream(start, stop)
+        stream = self._span_stream(start, stop)
         command_queue = queue.Queue()
         future_queue = queue.Queue()
         for i in range(self._parallelism):
@@ -848,6 +852,10 @@ class ZSS(object):
             add_fail(self.root_index_offset,
                      "root block missing or doubly-referenced")
         else:
+            if not 0 < root_ref.block_level < FIRST_EXTENSION_LEVEL:
+                add_fail(self.root_index_offset,
+                         "root index has bad level %s"
+                         % (root_ref.block_level,))
             if root_ref.block_length != self.root_index_length:
                 add_fail(self.root_index_offset,
                          "wrong root index length in header (%s != %s)"
