@@ -12,12 +12,3 @@ https://matthew-brett.github.io/pydagogue/python_msvc.html
 * Next
 
 ** file a bug or fix this bug: validate does not check for slack junk between end of header and first block
-
-
-** versiontools and --version
-setup.py
-conf.py
-main.py
-__init__.py
-
-** python 3

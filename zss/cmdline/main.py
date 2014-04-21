@@ -14,6 +14,8 @@ import codecs
 import six
 from docopt import docopt, DocoptExit
 
+import zss
+
 from .util import optfail
 
 # Docopt's exit conditions:
@@ -82,7 +84,7 @@ Available subcommands:
 For details, use 'zss <subcommand> --help'.
 """
 
-    opts = fixed_docopt(main.__doc__, argv=args, version="XX",
+    opts = fixed_docopt(main.__doc__, argv=args, version=zss.__version__,
                         options_first=True)
     # docopt handles --help and --version for us
     subcommand = opts["<subcommand>"]

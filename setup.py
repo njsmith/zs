@@ -29,9 +29,13 @@ if USE_CYTHON:
     #import pdb; pdb.set_trace()
     ext_modules = cythonize(ext_modules)
 
+
+version_dict = {}
+execfile("zss/version.py", version_dict)
+
 setup(
     name="zss",
-    version="0.0.0+dev",
+    version=version_dict["__version__"],
     description=DESC,
     long_description=LONG_DESC,
     author="Nathaniel J. Smith",
