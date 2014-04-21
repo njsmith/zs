@@ -25,6 +25,9 @@ for i in xrange(1, 26, 2):
 
 letters_sha256 = hashlib.sha256(pack_data_records(letters_records)).digest()
 
+def identity(x):
+    return x
+
 def _check_map_helper(records, arg1, arg2):
     assert arg1 == 1
     assert arg2 == 2
@@ -82,33 +85,12 @@ def check_letters_zss(z, codec):
             assert list(z.search(start=start, stop=stop, prefix=prefix)
                         ) == expected
 
-             # sloppy_block_search guarantees that it will return a superset
-             # of records, that it will never return a block which is entirely
-             # >= stop, and that it will return at most 1 block that contains
-             # anything that's *not* >= start.
-            sloppy_blocks = list(z.sloppy_block_search(start=start,
-                                                       stop=stop,
-                                                       prefix=prefix))
-            # bit of a kluge, but the .search() tests up above do exhaustive
-            # testing of norm_search_args, so at least it shouldn't invalidate
-            # the testing:
-            norm_start, norm_stop = z._norm_search_args(start, stop, prefix)
-            contains_start_slop = 0
-            sloppy_records = set()
-            for records in sloppy_blocks:
-                if records[0] < norm_start:
-                    contains_start_slop += 1
-                assert norm_stop is None or records[0] < norm_stop
-                sloppy_records.update(records)
-            assert contains_start_slop <= 1
-            assert sloppy_records.issuperset(expected)
-
-            sloppy_map_blocks = list(z.sloppy_block_map(
+            map_blocks = list(z.block_map(
                 _check_map_helper,
                 # test args and kwargs argument passing
                 args=(1,), kwargs={"arg2": 2},
                 start=start, stop=stop, prefix=prefix))
-            assert sloppy_map_blocks == sloppy_blocks
+            assert sum(map_blocks, []) == expected
 
             for term in [b"\n", b"\x00"]:
                 expected_dump = term.join(expected + [""])
@@ -130,8 +112,8 @@ def check_letters_zss(z, codec):
     assert list(z.search(stop=b"bb", prefix=b"b")) == [b"b"]
 
     assert_raises(ValueError, list,
-                  z.sloppy_block_map(_check_raise_helper, args=(ValueError,)))
-    assert_raises(ValueError, z.sloppy_block_exec,
+                  z.block_map(_check_raise_helper, args=(ValueError,)))
+    assert_raises(ValueError, z.block_exec,
                   _check_raise_helper, args=(ValueError,))
 
     z.validate()
@@ -170,9 +152,8 @@ def test_zss_close():
     z = ZSS(test_data_path("letters-none.zss"))
     z.close()
     for call in [[list, z.search()],
-                 [list, z.sloppy_block_search()],
                  [list,
-                  z.sloppy_block_map(_check_raise_helper, AssertionError)],
+                  z.block_map(_check_raise_helper, AssertionError)],
                  [list, z],
                  [z.dump, BytesIO()],
                  [z.validate],
@@ -190,7 +171,7 @@ def test_context_manager_closes():
         assert list(z.search()) == letters_records
     assert_raises(ZSSError, list, z.search())
 
-def test_sloppy_block_exec():
+def test_block_exec():
     # This function tricky to test in a multiprocessing world, because we need
     # some way to communicate back from the subprocesses that the execution
     # actually happened... instead we just test it in serial
@@ -203,9 +184,9 @@ def test_sloppy_block_exec():
         def __call__(self, records):
             self.count += 1
     count_blocks = CountBlocks()
-    z.sloppy_block_exec(count_blocks)
+    z.block_exec(count_blocks)
     assert count_blocks.count > 1
-    assert count_blocks.count == len(list(z.sloppy_block_search()))
+    assert count_blocks.count == len(list(z.block_map(identity)))
 
 def test_big_headers():
     from zss.reader import _lower_header_size_guess

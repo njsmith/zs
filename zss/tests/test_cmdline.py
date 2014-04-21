@@ -120,6 +120,9 @@ def test_info():
             assert binascii.unhexlify(info["data_sha256"]) == z.data_sha256
             assert info["metadata"] == z.metadata
 
+        just_metadata = json.loads(run(["info", p, "--metadata-only"]).stdout)
+        assert info["metadata"] == just_metadata
+
 def test_urls():
     with web_server(test_data_path()) as root_url:
         url = root_url + "/letters-none.zss"
@@ -128,6 +131,9 @@ def test_urls():
         assert run(["dump", url]).stdout == run(["dump", path]).stdout
         run(["validate", url])
         assert run(["info", url]).stdout == run(["info", path]).stdout
+
+def nothing(x):
+    return None
 
 def test_make():
     from .test_writer import records as big_records, temp_zss_path
@@ -204,8 +210,9 @@ def test_make():
 
             with ZSS(p_small) as z_small, ZSS(p_big) as z_big:
                 assert list(z_small) == list(z_big)
-                assert (len(list(z_small.sloppy_block_search()))
-                        > len(list(z_big.sloppy_block_search())))
+                # count how many blocks are in each file
+                assert (len(list(z_small.block_map(nothing)))
+                        > len(list(z_big.block_map(nothing))))
 
         # branching-factor
         with temp_zss_path() as p_b2, temp_zss_path() as p_b100:

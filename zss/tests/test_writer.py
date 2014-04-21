@@ -40,6 +40,9 @@ def temp_writer(**kwargs):
         with ZSSWriter(p, **kwargs) as zw:
             yield (p, zw)
 
+def identity(x):
+    return x
+
 def test_add_data_block():
     with temp_writer() as (p, zw):
         zw.add_data_block([b"a", b"b"])
@@ -48,8 +51,8 @@ def test_add_data_block():
 
         with ok_zss(p) as z:
             z.validate()
-            assert list(z.sloppy_block_search()) == [[b"a", b"b"],
-                                                     [b"c", b"z"]]
+            assert list(z.block_map(identity)) == [[b"a", b"b"],
+                                                   [b"c", b"z"]]
 
 def test_write_add_file_contents_terminator():
     for terminator in [b"\n", b"\x00", b"\r\n"]:
@@ -64,7 +67,7 @@ def test_write_add_file_contents_terminator():
 
             with ok_zss(p) as z:
                 assert list(z) == records
-                assert len(list(z.sloppy_block_search())) > len(records) / 5.0
+                assert len(list(z.block_map(identity))) > len(records) / 5.0
 
 def test_write_add_file_contents_length_prefixed():
     for mode in ["uleb128", "u64le"]:
@@ -78,7 +81,7 @@ def test_write_add_file_contents_length_prefixed():
 
             with ok_zss(p) as z:
                 assert list(z) == records
-                assert len(list(z.sloppy_block_search())) > len(records) / 5.0
+                assert len(list(z.block_map(identity))) > len(records) / 5.0
 
 def test_write_mixed():
     with temp_writer() as (p, zw):
@@ -169,7 +172,7 @@ def test_no_empty_blocks():
         # the implicit call to z.validate() here should error out if there are
         # any empty blocks, but let's check anyway.
         with ok_zss(p) as z:
-            assert len(list(z.sloppy_block_search())) == 2
+            assert len(list(z.block_map(identity))) == 2
 
 def test_unsorted():
     with temp_writer() as (_, zw):

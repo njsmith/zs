@@ -25,6 +25,15 @@ if hasattr(sys, "real_prefix"):
     #     https://stackoverflow.com/questions/1871549/python-determine-if-running-inside-virtualenv
     os.environ["PATH"] = "%s/bin:%s" % (sys.prefix, os.environ["PATH"])
 
+# And let's also make sure our example file is not present, to avoid
+# embarassing failures later
+import shutil
+if os.path.exists("example/scratch"):
+    shutil.rmtree("example/scratch")
+os.mkdir("example/scratch")
+shutil.copyfile("example/tiny-4grams.txt",
+                "example/scratch/tiny-4grams.txt")
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -43,7 +52,13 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.mathjax',
     'sphinxcontrib.programoutput',
+    'IPython.sphinxext.ipython_console_highlighting',
+    'IPython.sphinxext.ipython_directive',
 ]
+
+# IPython extension: don't bother with matplotlib, it probably isn't installed
+# and anyway we don't need it.
+ipython_mplbackend = None
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

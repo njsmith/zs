@@ -174,11 +174,12 @@ class ZSSWriter(object):
         # better take the trouble to use O_EXCL to prevent exposing everyone
         # who runs the test suite to security holes...
         open_flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
-        if hasattr(os, "O_BINARY"):  # pragma: no cover
-            # windows only
-            open_flags |= os.O_BINARY
+        # O_CLOEXEC is better to use than not, but platform specific
+        # O_BINARY is necessary on windows, unavailable elsewhere
+        for want_if_available in ["O_CLOEXEC", "O_BINARY"]:
+            open_flags |= getattr(os, want_if_available, 0)
         try:
-            fd = os.open(path, open_flags)
+            fd = os.open(path, open_flags, 0o666)
         except OSError as e:
             raise ZSSError("%s: %s" % (path, e))
         self._file = os.fdopen(fd, "w+b")
@@ -246,7 +247,6 @@ class ZSSWriter(object):
                                                args=writer_args)
         self._writer.start()
 
-        #: Boolean attribute indicating whether this ZSSWriter is closed.
         self.closed = False
 
     def _check_open(self):
@@ -280,9 +280,12 @@ class ZSSWriter(object):
             process.join(ERROR_CHECK_FREQ)
 
     def add_data_block(self, records):
-        """Append the given set of records to the ZSS file.
+        """Append the given set of records to the ZSS file as a single data
+        block.
 
-        :arg records: An iterable of byte strings giving the contents of each
+        (See :ref:`format` for details on what a data block is.)
+
+        :arg records: A list of byte strings giving the contents of each
           record.
         """
 
@@ -306,14 +309,14 @@ class ZSSWriter(object):
           file is always closed.
 
         :arg approx_block_size: The approximate size of each data block, in
-          bytes.
+          bytes, *before* compression is applied.
 
         :arg terminator: A byte string containing a terminator appended to the
           end of each record. Default is a newline.
 
         :arg length_prefixed: If given, records are output in a
           length-prefixed format, and ``terminator`` is ignored. Valid values
-          are the strings ``"uleb128"`` or ``"u64le"``, or None.
+          are the strings ``"uleb128"`` or ``"u64le"``, or ``None``.
 
         """
         self._check_open()
@@ -384,16 +387,19 @@ class ZSSWriter(object):
 
         Do not call this method unless you are sure you have added the right
         records. (In particular, you definitely don't want to call this from a
-        ``finally`` block, or automatically from a 'with' block context
+        ``finally`` block, or automatically from a ``with`` block context
         manager.)
 
-        Calls close().
+        Calls :meth:`close`.
 
         """
         self._check_open()
         with errors_close(self):
             # Stop all the processing queues and wait for them to finish.
-            sys.stdout.write("\rzss: Waiting for write thread to finish\n")
+            # if self._show_spinner:
+            #     sys.stdout.write("\n")
+            # sys.stdout.write("zss: Finished reading input; waiting for "
+            #                  "write thread to catch up\n")
             for i in xrange(self._parallelism):
                 self._safe_put(self._compress_queue, _QUIT)
             for compressor in self._compressors:
@@ -406,9 +412,9 @@ class ZSSWriter(object):
         # The writer and compressors have all exited, so any errors they've
         # encountered have definitely been enqueued.
         self._check_error()
-        sys.stdout.write("\rzss: All data written; updating header\n")
+        sys.stdout.write("zss: Updating header...\n")
         root_index_offset, root_index_length, sha256 = self._finish_queue.get()
-        sys.stdout.write("zss: Root index offset: %s\n" % (root_index_offset,))
+        #sys.stdout.write("zss: Root index offset: %s\n" % (root_index_offset,))
         # Now we have the root offset
         self._header["root_index_offset"] = root_index_offset
         self._header["root_index_length"] = root_index_length
@@ -441,6 +447,10 @@ class ZSSWriter(object):
 
         If you call this method before calling :meth:`finish`, then you will
         not have a working ZSS file.
+
+        This object can be used as a context manager in a ``with`` block, in
+        which case :meth:`close` will be called automatically, but
+        :meth:`finish` will not be.
         """
         if self.closed:
             return
@@ -499,11 +509,20 @@ def _write_worker(path, branching_factor,
     wanted_job = 0
     get = write_queue.get
     write_block = data_appender.write_block
+    def spin(done=False):
+        if show_spinner and (done or wanted_job % 100 == 0):
+            if wanted_job > 0:
+                sys.stdout.write("\r")
+            sys.stdout.write("zss: Data blocks written: %s" % (wanted_job,))
+            if done:
+                sys.stdout.write("\n")
+            sys.stdout.flush()
     with errors_to(error_queue):
         while True:
             job = get()
             #sys.stderr.write("write_worker: got\n")
             if job is _QUIT:
+                spin(done=True)
                 assert not pending_jobs
                 header_info = data_appender.close_and_get_header_info()
                 finish_queue.put(header_info)
@@ -512,8 +531,7 @@ def _write_worker(path, branching_factor,
             while wanted_job in pending_jobs:
                 #sys.stderr.write("write_worker: writing %s\n" % (wanted_job,))
                 write_block(0, *pending_jobs[wanted_job])
-                if show_spinner and wanted_job % 100 == 0:
-                    sys.stdout.write(".")
+                spin()
                 del pending_jobs[wanted_job]
                 wanted_job += 1
 

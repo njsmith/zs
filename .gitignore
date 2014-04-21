@@ -7,6 +7,8 @@ htmlcov
 .coverage.*
 # Emacs autosave
 *~
+# The scratch dir used to demonstrate 'zss make' when building the docs
+doc/example/scratch
 
 ### Github defaults:
 

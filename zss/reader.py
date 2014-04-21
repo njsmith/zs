@@ -95,38 +95,46 @@ def _check_block(offset, raw_block, checksum):
 class _ZSSMapStop(Exception):
     pass
 
-# sentinel used for communication between _map_raw_helper and main process
+# sentinel used for communication between _map_raw_helper and main process,
+# and also between _block_map_helper and main process.
 class _ZSS_MAP_SKIP(object):
     pass
 
 def _map_raw_helper(offset, block_length, raw_block, checksum,
-                    skip_index, stop, fn, args, kwargs):
+                    skip_index, start, stop, fn, args, kwargs):
     block_level, zdata = _check_block(offset, raw_block, checksum)
     if skip_index and block_level > 0:
         return _ZSS_MAP_SKIP
     if block_level >= FIRST_EXTENSION_LEVEL:
         return _ZSS_MAP_SKIP
-    return fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
+    return fn(offset, block_length, block_level, zdata, start, stop,
+              *args, **kwargs)
 
 def _decompress_helper(offset, block_length,
-                       block_level, zdata, stop, decompress_fn):
+                       block_level, zdata, start, stop, decompress_fn):
     # stopping has to be left to the next level up
     return decompress_fn(zdata)
 
-def _sloppy_block_map_helper(offset, block_length, block_level, zdata,
-                             stop, decompress_fn,
+def _trim_records(records, start, stop):
+    if records[0] < start:
+        records = records[bisect_left(records, start):]
+    if stop is not None and records and records[-1] >= stop:
+        records = records[:bisect_left(records, stop)]
+    return records
+
+def _block_map_helper(offset, block_length, block_level, zdata,
+                             start, stop, decompress_fn,
                              user_fn, user_args, user_kwargs):
     data = decompress_fn(zdata)
     records = unpack_data_records(data)
     if stop is not None and records[0] >= stop:
         raise _ZSSMapStop()
+    records = _trim_records(records, start, stop)
+    if not records:
+        return _ZSS_MAP_SKIP
     return user_fn(records, *user_args, **user_kwargs)
 
-def _dump_helper(records, start, stop, terminator, length_prefixed):
-    if records[0] < start:
-        records = records[bisect_left(records, start):]
-    if stop is not None and records and records[-1] >= stop:
-        records = records[:bisect_left(records, stop)]
+def _dump_helper(records, terminator, length_prefixed):
     if length_prefixed is None:
         records.append(b"")
         return terminator.join(records)
@@ -135,7 +143,7 @@ def _dump_helper(records, start, stop, terminator, length_prefixed):
         write_length_prefixed(out, records, length_prefixed)
         return out.getvalue()
 
-def _validate_helper(offset, block_length, block_level, zdata, stop,
+def _validate_helper(offset, block_length, block_level, zdata, start, stop,
                  decompress_fn):
     return (offset, block_length, block_level, decompress_fn(zdata))
 
@@ -188,11 +196,6 @@ def test_LRU():
 class ZSS(object):
     """Object representing a .zss file opened for reading.
 
-    This object can be used as a context manager, e.g.::
-
-        with ZSS("./my/favorite.zss") as z:
-            ...
-
     :arg path: A string containing an on-disk file to be opened. Exactly one
       of ``path`` or ``url`` must be specified.
 
@@ -207,8 +210,9 @@ class ZSS(object):
       will be used internally for decompression and other CPU-intensive
       tasks. ``parallelism=1`` means to spawn 1 worker process; if you want to
       perform decompression and other such tasks in serial in your main
-      thread, then uses ``parallelism=0``. The default of ``parallelism="auto"
-      means to spawn one worker process per available CPU.
+      thread, then uses ``parallelism=0``. The default of
+      ``parallelism="auto"`` means to spawn one worker process per available
+      CPU.
 
     :arg index_block_cache: The number of index blocks to keep cached in
       memory. This speeds up repeated queries. Larger values provide better
@@ -216,6 +220,10 @@ class ZSS(object):
       as large as the depth of your .zss file's index tree, to ensure that the
       root block stays cached.
 
+    This object can be used as a context manager, e.g.::
+
+        with ZSS("./my/favorite.zss") as z:
+            ...
     """
     def __init__(self, path=None, url=None,
                  parallelism="auto", index_block_cache=32):
@@ -228,16 +236,13 @@ class ZSS(object):
 
         header = self._get_header()
 
-        #: The file offset of the root index block. (See :ref:`format-header`.)
         self.root_index_offset = header["root_index_offset"]
-        #: The length of the root index block. (See :ref:`format-header`.)
         self.root_index_length = header["root_index_length"]
         codec = header["codec"].rstrip(b"\x00")
         if codec not in codecs:
             raise ZSSCorrupt("unrecognized compression codec %r"
                              % (codec,))
         self._decompress = codecs[codec][-1]
-        #: The proper length of this file, as stored in the header.
         self.total_file_length = header["total_file_length"]
         # Necessary to check this to meet our guarantee that we will never
         # miss returning data that should have been returned.
@@ -246,18 +251,8 @@ class ZSS(object):
             raise ZSSCorrupt("file is %s bytes, but header says it should "
                              "be %s"
                              % (actual_length, self.total_file_length))
-        #: The compression codec used on this file, as a byte string.
         self.codec = codec
-        #: A strong hash of the underlying data records contained in this
-        #: file. If two files have the same value here, then they are
-        #: guaranteed to represent exactly the same data (i.e., return the
-        #: same records to the same queries), though they might be stored
-        #: using different compression algorithms, have different metadata,
-        #: etc.
         self.data_sha256 = header["sha256"]
-        #: A .zss file can contain arbitrary metadata in the form of a
-        #: JSON-encoded dictionary. This attribute contains this metadata in
-        #: unpacked form.
         self.metadata = header["metadata"]
         if not isinstance(self.metadata, dict):
             raise ZSSCorrupt("bad metadata")
@@ -313,11 +308,14 @@ class ZSS(object):
     def root_index_level(self):
         """The level of the root index.
 
-        It takes ``root_index_level + 2`` seeks to open a ZSS file from
-        scratch and then find an arbitrary record. (When accessing a file over
-        HTTP, for "seek" read "round trip to server".) For later queries on
-        the same :class:`ZSS` object, caching should reduce this by at least
-        2.
+        Starting from scratch, finding an arbitrary record in a ZSS file
+        requires that we fetch the header, fetch the root block, and then
+        fetch this many blocks to traverse the index tree. So that's a total
+        of ``root_index_level + 2`` fetches. (On local disk, each "fetch" is a
+        disk seek; over HTTP, each "fetch" is a round-trip to the server.) For
+        later queries on the same :class:`ZSS` object, at least the header and
+        root will be cached, and (if you're lucky) other blocks may be as
+        well.
 
         """
         level, _ = self._get_index_block(self.root_index_offset,
@@ -411,7 +409,7 @@ class ZSS(object):
         # into start/stop.
         return start, stop
 
-    def _sloppy_stream(self, start, stop):
+    def _block_stream(self, start, stop):
         start_offset = self._find_ge_block(start, True)
         stop_offset = None
         if self._transport.remote and stop is not None:
@@ -500,7 +498,8 @@ class ZSS(object):
         def result(self):
             reraise(*self._exc_info)
 
-    def _readahead_thread(self, stream, stop, skip_index, fn, args, kwargs,
+    def _readahead_thread(self, stream, start, stop, skip_index,
+                          fn, args, kwargs,
                           command_queue, future_queue):
         try:
             while command_queue.get() is not self._MAP_QUIT:
@@ -514,7 +513,7 @@ class ZSS(object):
                     f = self._executor.submit(_map_raw_helper,
                                               offset, block_length,
                                               raw_block, checksum,
-                                              skip_index, stop,
+                                              skip_index, start, stop,
                                               fn, args, kwargs)
                     future_queue.put(f)
                 # This can happen if, e.g., _get_raw_block_unchecked errors
@@ -540,23 +539,25 @@ class ZSS(object):
         All the more user-friendly functions are implemented in terms of it.
 
         It finds all blocks which may contain records that are >= start, and
-        then for each such block it calls
+        then for each such block it calls::
 
-          fn(offset, block_length, block_level, zdata, stop, *args, **kwargs)
+          fn(offset, block_length, block_level, zdata, start, stop,
+             *args, **kwargs)
 
         Key points:
-        - If skip_index is true, then it skips over index blocks (i.e.,
+
+        * If skip_index is true, then it skips over index blocks (i.e.,
           block_level will always be 0).
 
-        - It unconditionally skips over "extension blocks" (those with level
+        * It unconditionally skips over "extension blocks" (those with level
           >= 64).
 
-        - These calls are performed in parallel in however many worker
+        * These calls are performed in parallel in however many worker
           processes were configured when this ZSS object was created;
           therefore, fn, args, and kwargs must all be pickleable (unless you
           use parallelism=0).
 
-        - The iteration may or may not stop when the 'stop' key is reached. If
+        * The iteration may or may not stop when the 'stop' key is reached. If
           you want it to stop for sure at any point, you must either (a) raise
           a _ZSSMapStop from your callback function, or (b) call .close() on
           this generator.
@@ -566,14 +567,14 @@ class ZSS(object):
         return gen
 
     def _map_raw_block_gen(self, start, stop, skip_index, fn, *args, **kwargs):
-        stream = self._sloppy_stream(start, stop)
+        stream = self._block_stream(start, stop)
         command_queue = queue.Queue()
         future_queue = queue.Queue()
         for i in range(self._parallelism):
             command_queue.put(self._MAP_CONTINUE)
         rt = threading.Thread(target=self._readahead_thread,
                               args=(stream,
-                                    stop, skip_index, fn, args, kwargs,
+                                    start, stop, skip_index, fn, args, kwargs,
                                     command_queue, future_queue))
         try:
             rt.start()
@@ -597,14 +598,26 @@ class ZSS(object):
             command_queue.put(self._MAP_QUIT)
             rt.join()
 
-    def sloppy_block_search(self, start=None, stop=None, prefix=None):
-        """Finds all data blocks which might contain records matching given
-        arguments. See :meth:`search` for definition of ``start``, ``stop``,
-        ``match``.
+    def search(self, start=None, stop=None, prefix=None):
+        """Iterate over all records matching the given query.
 
-        This isn't terribly useful on its own, but it can be helpful in
-        debugging the use of :meth:`sloppy_block_map`.
+        A record is considered to "match" if:
 
+        * ``start <= record``, and
+        * ``record < stop``, and
+        * ``record.startswith(prefix)``
+
+        Any or all of the arguments can be left as ``None``, in which case the
+        corresponding check or checks are not performed.
+
+        Note the asymmetry between ``start`` and ``stop`` -- this is analogous
+        to other Python constructs which use half-open [start, stop) ranges,
+        like :func:`range`.
+
+        If no arguments are given, iterates over the entire contents of the
+        .zss file.
+
+        Records are always returned in sorted order.
         """
         # This does decompression in the worker, and unpacking in the main
         # process (because no point in unpacking, then pickling, then
@@ -618,26 +631,59 @@ class ZSS(object):
                 records = unpack_data_records(data)
                 if stop is not None and records[0] >= stop:
                     break
-                yield records
+                records = _trim_records(records, start, stop)
+                for record in records:
+                    yield record
 
-    def sloppy_block_map(self, fn, start=None, stop=None, prefix=None,
-                         args=(), kwargs={}):
-        """Apply a given function to all data blocks that contain records
-        matching the given arguments.
+    def block_map(self, fn, start=None, stop=None, prefix=None,
+                  args=(), kwargs={}):
+        """Apply a given function -- in parallel -- to records matching a
+        given query.
 
-        Using this method (or its friend, :meth:`sloppy_block_exec`) is the
+        Using this method (or its friend, :meth:`block_exec`) is the
         best way to perform large bulk operations on ZSS files.
 
-        This function calls the given function, with the ``args`` and
-        ``kwargs``, on all data blocks that contain records which match the
-        given
+        The way to think about this is, first we find all records matching the
+        given query::
 
-          def sloppy_block_map(self, fn, start=None, stop=None, prefix=None,
-                               args=(), kwargs=()):
-              for block in self.sloppy_block_search(start, stop, prefix):
-                  yield fn(block, *args, **kwargs)
+            matches = zss_obj.search(start=start, stop=stop, prefix=prefix)
 
-        However,
+        and then we divide the resulting list of records up into arbitrarily
+        sized chunks, and for each chunk we call the given function, and yield
+        the result::
+
+            while there are matches:
+                chunk = list(get arbitrarily many matches)
+                yield fn(chunk, *args, **kwargs)
+
+        But, there is a trick: in fact many copies of the function are run in
+        parallel in different worker processes, and then the results are
+        passed back to the main process for you to collect. (Think "poor-man's
+        map-reduce".)
+
+        This means that your ``fn``, ``args``, ``kwargs``, and return values
+        must all be pickleable. In particular, ``fn`` probably has to either
+        be a global function in a named module, or else an object with a
+        ``__call__`` method that is an instance of a globally defined class in
+        a named module. (Sorry, I didn't make the rules. Feel free to submit
+        patches to use a more featureful serialization library like 'dill',
+        esp. if you can demonstrate that they don't add too much overhead.)
+
+        This will be most efficient if ``fn`` performs non-trivial work, and
+        especially if it can avoid returning large/complicated structures from
+        ``fn`` -- the idea is that it should be *faster* for the code calling
+        ``block_map`` to process the results than it would have been to just
+        call ``search`` directly.
+
+        If you manage to take this to the extreme where you have nothing to
+        return from ``block_map`` (maybe your ``fn`` is writing to a database
+        or something), then you can use ``block_exec`` instead to save a bit
+        of boilerplate.
+
+        If you pass ``parallelism=0`` when creating your :class:`ZSS` object,
+        then this method will perform all work within the main process. This
+        makes debugging a lot easier, because it will let you get real
+        backtraces if (when) your ``fn`` crashes.
 
         """
         # NB in the docs: anything you return from this fn has to be pickled
@@ -647,48 +693,19 @@ class ZSS(object):
         self._check_closed()
         start, stop = self._norm_search_args(start, stop, prefix)
         mrb = self._map_raw_block
-        with closing(mrb(start, stop, True, _sloppy_block_map_helper,
+        with closing(mrb(start, stop, True, _block_map_helper,
                          self._decompress, fn, args, kwargs)) as it:
             for result in it:
-                yield result
+                if result is not _ZSS_MAP_SKIP:
+                    yield result
 
-    def sloppy_block_exec(self, fn, start=None, stop=None, prefix=None,
-                          args=(), kwargs={}):
+    def block_exec(self, fn, start=None, stop=None, prefix=None,
+                   args=(), kwargs={}):
         self._check_closed()
-        with closing(self.sloppy_block_map(fn, start, stop, prefix,
+        with closing(self.block_map(fn, start, stop, prefix,
                                            args, kwargs)) as it:
             for _ in it:
                 pass
-
-    def search(self, start=None, stop=None, prefix=None):
-        """Iterate over all records matching the given query.
-
-        A record is consider to "match" if:
-        * ``start <= record``
-        * ``record < ``stop``
-        * ``record.startswith(prefix)
-        Any or all of the arguments can be left as ``None``, in which case the
-        corresponding check or checks are not performed.
-
-        Note the asymmetry between ``start`` and ``stop`` -- this is analogous
-        to other Python constructs which use half-open [start, stop) ranges,
-        like :func:`range`.
-
-        If no arguments are given, iterates over the entire contents of the
-        .zss file.
-
-        Records are always returned in sorted order.
-        """
-        self._check_closed()
-        start, stop = self._norm_search_args(start, stop, prefix)
-        with closing(self.sloppy_block_search(start, stop)) as block_iter:
-            for records in block_iter:
-                if records[0] < start:
-                    records = records[bisect_left(records, start):]
-                if stop is not None and records and records[-1] >= stop:
-                    records = records[:bisect_left(records, stop)]
-                for record in records:
-                    yield record
 
     def __iter__(self):
         """Equivalent to ``zss_obj.search()``."""
@@ -700,8 +717,10 @@ class ZSS(object):
         """Decompress a given range of the .zss file to another file. This is
         performed in the most efficient available way.
 
-        :arg terminator: A byte string containing a terminator appended to the
-          end of each record. Default is a newline.
+        :arg terminator: A terminator appended to the end of each
+          record. Default is a newline. (Ignored if ``length_prefixed`` is
+          given.)
+        :type terminator: byte string
 
         :arg length_prefixed: If given, records are output in a
           length-prefixed format, and ``terminator`` is ignored. Valid values
@@ -717,11 +736,10 @@ class ZSS(object):
 
         """
         self._check_closed()
-        start, stop = self._norm_search_args(start, stop, prefix)
-        sbm = self.sloppy_block_map
+        sbm = self.block_map
         with closing(sbm(_dump_helper,
-                         start=start, stop=stop,
-                         args=(start, stop, terminator, length_prefixed))) as it:
+                         start=start, stop=stop, prefix=prefix,
+                         args=(terminator, length_prefixed))) as it:
             out_file.writelines(it)
 
     def validate(self):
@@ -846,9 +864,9 @@ class ZSS(object):
         an error.
 
         .. note:: If you have any active iterators (from :meth:`search`,
-           :meth:`sloppy_block_map`, etc.), then they will be closed as
-           well. This means that any further attempts to iterate them will
-           raise ``StopIteration``.
+           :meth:`block_map`, etc.), then they will be closed as well. This
+           means that any further attempts to iterate them will raise
+           ``StopIteration``.
 
         """
         # Slightly weird construct b/c the way garbage collection works, an

@@ -46,6 +46,7 @@ Downloads:
 Dependencies:
   * Python 2.7 (or Py 3.3? XX check)
   * Python packages:
+
     * six
     * requests
     * docopt

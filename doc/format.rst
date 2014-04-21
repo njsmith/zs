@@ -1,9 +1,11 @@
+.. _format:
+
 On-disk layout of ZSS files
 ===========================
 
 This page provides a complete specification of the ZSS file format,
 along with rationale for specific design choices. It should be read by
-anyone who plans to implement a new reader or write for the
+anyone who plans to implement a new reader or writer for the
 format, or is just interested in how things work under the covers.
 
 Overview and general notes
@@ -87,6 +89,45 @@ for this CRC are: polynomial = 0x42f0e1eba9ea3693, reflect in = True,
 xor in = 0xffffffffffffffff, reflect out = True, xor out =
 0xffffffffffffffff, check = 0x995dc9bbdf1939fa.
 
+.. _integer-representations:
+
+Integer representations
+-----------------------
+
+Within the header, we make life easier for simple tools like `file
+<https://en.wikipedia.org/wiki/File_%28command%29>`_ by encoding all
+integers using fixed-length 64-bit little-endian format (``u64le`` for
+short).
+
+Outside of the header, integers are encoded in the *uleb128* format,
+familiar from the `DWARF debugging format
+<https://en.wikipedia.org/wiki/DWARF>`_. Okay, maybe not so
+familiar. This is a simple variable-length encoding for unsigned
+integers of arbitrary size using **u**\nsigned **l**\ittle-**e**\ndian
+**b**\ase-**128**. To read a uleb128 value, you proceed from the
+beginning of the string, one byte at a time. The lower 7 bits of each
+byte give you the next 7 bits of your integer. This is little-endian,
+so the first byte gives you the least-significant 7 bits of your
+integer, then the next byte gives you bits 8 through 15, the one after
+that the bits 16 through 23, etc. The 8th, most-significant bit of
+each byte serves as a continuation byte. If this is 1, then you keep
+going and read the next byte. If it is 0, then you are
+done. Examples::
+
+  uleb128 string  <->  integer value
+  --------------       -------------
+              00                0x00
+              7f                0x7f
+           80 01                0x80
+           ff 20              0x107f
+  80 80 80 80 20             2 ** 33
+
+(This format is also used by `protocol buffers
+<https://en.wikipedia.org/wiki/Protocol_Buffers>`_.) This format
+allows for redundant representations by adding leading zeros, e.g. the
+value 0 could also be written ``80 00``. However, doing this is
+forbidden; all values must be encoded in their shortest form.
+
 Layout details
 --------------
 
@@ -160,11 +201,6 @@ provide a more informative error message while rejecting the file.
 Header
 ''''''
 
-Within the header, we make life easier for simple tools like `file
-<https://en.wikipedia.org/wiki/File_%28command%29>`_ by encoding all
-integers using fixed-length 64-bit little-endian format (``u64le`` for
-short).
-
 The header contains the following fields, in order:
 
 * Length (``u64le``): The length of the data in the header. This does
@@ -202,18 +238,18 @@ The header contains the following fields, in order:
   * ``none``: Block payloads are stored in raw, uncompressed form.
 
   * ``deflate``: Block payloads are stored using the deflate format as
-  defined in `RFC 1951 <https://tools.ietf.org/html/rfc1951>`_. Note
-  that this is different from both the gzip format (RFC 1952) and the
-  zlib format (RFC 1950), both of which use different framing and
-  checksums. ZSS provides its own framing and checksum, so we just use
-  raw deflate streams.
+    defined in `RFC 1951 <https://tools.ietf.org/html/rfc1951>`_. Note
+    that this is different from both the gzip format (RFC 1952) and
+    the zlib format (RFC 1950), both of which use different framing
+    and checksums. ZSS provides its own framing and checksum, so we
+    just use raw deflate streams.
 
   * ``bz2``: Block payloads are compressed using `the bzip2 format
-  <https://en.wikipedia.org/wiki/Bzip2>`_. Unfortunately there is no
-  easy way to get a raw, unframed bzip2 stream with commonly available
-  libraries, so using this method adds 10-20 bytes of extra framing
-  overhead. Fortunately the improved compression usually more than
-  makes up for this.
+    <https://en.wikipedia.org/wiki/Bzip2>`_. Unfortunately there is no
+    easy way to get a raw, unframed bzip2 stream with commonly
+    available libraries, so using this method adds 10-20 bytes of
+    extra framing overhead. Fortunately the improved compression
+    usually more than makes up for this.
 
 * Metadata length (``u64le``): The length of the next field:
 
@@ -223,7 +259,7 @@ The header contains the following fields, in order:
   dict, hash table, etc. -- the outermost characters have to be
   ``{}``). But this object can contain arbitrarily complex values
   (though we recommend restricting yourself to strings for the
-  keys). See `Metadata conventions`_.
+  keys). See :ref:`metadata-conventions`.
 
 * <extensions> (??): Compliant readers should ignore any data
   occurring between the end of the metadata field and the end of the
@@ -238,35 +274,6 @@ The header contains the following fields, in order:
 
 Blocks
 ''''''
-
-Outside of the header, integers are encoded in the *uleb128* format,
-familiar from the `DWARF debugging format
-<https://en.wikipedia.org/wiki/DWARF>`_. Okay, maybe not so
-familiar. This is a simple variable-length encoding for unsigned
-integers of arbitrary size using **u**\nsigned **l**\ittle-**e**\ndian
-**b**\ase-**128**. To read a uleb128 value, you proceed from the
-beginning of the string, one byte at a time. The lower 7 bits of each
-byte give you the next 7 bits of your integer. This is little-endian,
-so the first byte gives you the least-significant 7 bits of your
-integer, then the next byte gives you bits 8 through 15, the one after
-that the bits 16 through 23, etc. The 8th, most-significant bit of
-each byte serves as a continuation byte. If this is 1, then you keep
-going and read the next byte. If it is 0, then you are
-done. Examples::
-
-  uleb128 string  <->  integer value
-  --------------       -------------
-              00                0x00
-              7f                0x7f
-           80 01                0x80
-           ff 20              0x107f
-  80 80 80 80 20             2 ** 33
-
-(This format is also used by `protocol buffers
-<https://en.wikipedia.org/wiki/Protocol_Buffers>`_.) This format
-allows for redundant representations by adding leading zeros, e.g. the
-value 0 could also be written ``80 00``. However, doing this is
-forbidden; all values must be encoded in their shortest form.
 
 Blocks themselves all have the same format:
 
@@ -331,9 +338,9 @@ Each index payload entry has the form:
 
 * Block length (``uleb128``): The length of the pointed-to block. This
   *includes* the root index block's length and CRC fields; the idea is
-  *that doing a single read of this length, a the given offset, will
-  *give us the root index itself. This is an important optimization
-  *when IO has high-latency, as when accessing a ZSS file over HTTP.
+  that doing a single read of this length, a the given offset, will
+  give us the root index itself. This is an important optimization
+  when IO has high-latency, as when accessing a ZSS file over HTTP.
 
 Then this is repeated as many times as you want.
 

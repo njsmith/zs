@@ -10,6 +10,7 @@ Downloads:
 Dependencies:
   * Python 2.7 (or Py 3.3? XX check)
   * Python packages:
+
     * six
     * requests
     * docopt
@@ -26,7 +27,7 @@ Code and bug tracker:
   https://github.com/njsmith/zss
 
 Mailing list:
-  * TODO
+  TODO
 
 License:
   2-clause BSD, see LICENSE.txt for details.

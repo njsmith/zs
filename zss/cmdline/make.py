@@ -76,7 +76,8 @@ Output file options:
     if "__compress-level__" in opts:
         codec_kwargs["compress_level"] = opts["__compress-level__"]
 
-    sys.stdout.write("zss: Setting up writer\n")
+    sys.stdout.write("zss: Opening new ZSS file: %s\n"
+                     % (opts["<new_zss_file>"],))
     with ZSSWriter(opts["<new_zss_file>"],
                    metadata=metadata,
                    branching_factor=opts["__branching-factor__"],
@@ -86,7 +87,9 @@ Output file options:
                    show_spinner=not opts["--no-spinner"],
                    include_default_metadata=not opts["--no-default-metadata"],
                ) as out_z:
-        sys.stdout.write("zss: Reading input\n")
+        sys.stdout.write("zss: Reading input file: %s\n"
+                         % (opts["<input_file>"],))
+        sys.stdout.flush()
         if opts["<input_file>"] == "-":
             in_handle = sys.stdin
         else:
@@ -98,6 +101,6 @@ Output file options:
                                 terminator=opts["__terminator__"],
                                 length_prefixed=opts["--length-prefixed"])
         out_z.finish()
-        sys.stdout.write("zss: Done\n")
+        sys.stdout.write("zss: Done.\n")
 
     return 0

@@ -40,9 +40,18 @@ header_data_format = [
     ]
 
 class ZSSError(Exception):
+    """Exception class used for most errors encountered in the ZSS
+    package. (Though we do sometimes raise exceptions of the standard Python
+    types like :class:`IOError`, :class:`ValueError`, etc.)
+
+    """
     pass
 
 class ZSSCorrupt(ZSSError):
+    """A subclass of :class:`ZSSError`, used specifically for errors that
+    indicate a malformed or corrupted ZSS file.
+
+    """
     pass
 
 def encoded_crc64xz(data):
