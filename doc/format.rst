@@ -158,7 +158,7 @@ followed by two bytes which might be used as a version identifier in
 case there is ever a ZSS version 2.
 
 Writing out a large ZSS file is a somewhat involved operation that
-might take a long time; it's possible for a hardware or software
+might take a long time. It's possible for a hardware or software
 problem to occur and cause this process to be aborted before the file
 is completely written, leaving behind a partial, corrupt ZSS
 file. Because ZSS is designed as a reliable archival format we would
@@ -240,9 +240,9 @@ The header contains the following fields, in order:
   * ``deflate``: Block payloads are stored using the deflate format as
     defined in `RFC 1951 <https://tools.ietf.org/html/rfc1951>`_. Note
     that this is different from both the gzip format (RFC 1952) and
-    the zlib format (RFC 1950), both of which use different framing
-    and checksums. ZSS provides its own framing and checksum, so we
-    just use raw deflate streams.
+    the zlib format (RFC 1950), which use different framing and
+    checksums. ZSS provides its own framing and checksum, so we just
+    use raw deflate streams.
 
   * ``bz2``: Block payloads are compressed using `the bzip2 format
     <https://en.wikipedia.org/wiki/Bzip2>`_. Unfortunately there is no
@@ -256,9 +256,9 @@ The header contains the following fields, in order:
 * Metadata (UTF-8 encoded JSON): This field allows arbitrary metadata
   to be attached to a ZSS file. The only restriction is that the
   encoded value must be what JSON calls an "object" (also known as a
-  dict, hash table, etc. -- the outermost characters have to be
-  ``{}``). But this object can contain arbitrarily complex values
-  (though we recommend restricting yourself to strings for the
+  dict, hash table, etc. -- basically, the outermost characters have
+  to be ``{}``). But this object can contain arbitrarily complex
+  values (though we recommend restricting yourself to strings for the
   keys). See :ref:`metadata-conventions`.
 
 * <extensions> (??): Compliant readers should ignore any data

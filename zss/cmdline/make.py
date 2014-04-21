@@ -36,7 +36,11 @@ Input file options:
   --terminator=TERMINATOR    Treat the input file as containing a series of
                              records separated by TERMINATOR. Standard Python
                              string escapes are supported (e.g., "\\x00" for
-                             NUL-terminated records). [default: \\n]
+                             NUL-terminated records). The default is
+                             appropriate for standard Unix/OS X text files. If
+                             your have a text file with Windows-style line
+                             endings, then you'll want to use "\\r\\n"
+                             instead. [default: \\n]
   --length-prefixed=TYPE     Treat the input file as containing a series of
                              records containing arbitrary binary data, each
                              prefixed by its length in bytes, with this length
@@ -61,10 +65,10 @@ Output file options:
   --metadata=JSON            A JSON string representing an arbitrary
                              dictionary of properties, to be stored in the
                              file header. [default: {}]
-  --no-default-metadata      By default, 'zss make' adds some extra keys to
-                             the resulting file: build-host, build-user,
-                             build-time. If you don't want these, pass this
-                             option.
+  --no-default-metadata      By default, 'zss make' adds an extra "build-info"
+                             key to the metadata, recording the time, host,
+                             and user who created the file. This option
+                             disables this behaviour.
 """
 
     try:

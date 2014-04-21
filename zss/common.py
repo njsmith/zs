@@ -58,7 +58,7 @@ def encoded_crc64xz(data):
     return struct.pack("<Q", zss._zss.crc64xz(data))
 
 # Standardize the name of the compress_level argument:
-def deflate_compress(data, compress_level=6):
+def deflate_compress(payload, compress_level=6):
     # Weird poorly-documented zlib feature: you can get raw 'deflate' by
     # passing a negative 'wbits' argument. So wbits=15 (the default) produces
     # data with a zlib header and checksum (RFC 1950), while wbits=-15 gives
@@ -66,26 +66,26 @@ def deflate_compress(data, compress_level=6):
     # need the framing and we have our own checksum, so raw deflate is good
     # for us.
     compressor = zlib.compressobj(compress_level, zlib.DEFLATED, -15)
-    zdata = compressor.compress(data)
-    zdata += compressor.flush()
-    return zdata
+    zpayload = compressor.compress(payload)
+    zpayload += compressor.flush()
+    return zpayload
 
-def deflate_decompress(zdata):
-    return zlib.decompress(zdata, -15)
+def deflate_decompress(zpayload):
+    return zlib.decompress(zpayload, -15)
 
 # Standardize the name of the compress_level argument:
-def bz2_compress(data, compress_level=9):
+def bz2_compress(payload, compress_level=9):
     # This uses bz2 framing, which is wasteful and means we end up with a
     # double-checksum, but checksumming is more than an order of magnitude
     # faster than bz2 itself, and there's no practical way to get a 'raw' bz2
     # stream, so oh well.
-    return bz2.compress(data, compress_level)
+    return bz2.compress(payload, compress_level)
 
-def none_compress(data):
-    return data
+def none_compress(payload):
+    return payload
 
-def none_decompress(zdata):
-    return zdata
+def none_decompress(zpayload):
+    return zpayload
 
 # These callables must be pickleable for multiprocessing.
 codecs = {

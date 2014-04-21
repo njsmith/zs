@@ -53,6 +53,7 @@ Dependencies:
 
 Optional dependencies:
   * nose: needed to run tests
+  * nose-cov: needed to get useful test coverage information
   * nginx: needed to run HTTP tests
   * lxml: needed by the the gbooksv2 downloader
 

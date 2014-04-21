@@ -67,17 +67,18 @@ field, which contains arbitrary metadata describing the file. Here we
 see that even though we didn't supply any metadata of our own, ``zss
 make`` added some default metadata; if we wanted to suppress this we
 could have used the ``--no-default-metadata`` option. The
-``"data_sha256"`` field which is, as you might expect, a `SHA-256
+``"data_sha256"`` field is, as you might expect, a `SHA-256
 <https://en.wikipedia.org/wiki/SHA-256>`_ hash of the data contained
 in this file -- two ZSS files will have the same value here if and
 only if they contain exactly the same logical records, regardless of
 compression and other details of physical file layout. The ``"codec"``
-field tells us which kind of compression was used (this file used the
+field tells us which kind of compression was used (this file uses the
 `bzip2 format <https://en.wikipedia.org/wiki/Bzip2>`_); if we wanted
 something different we could have passed ``--codec`` to ``zss
 make``. The other fields have to do with more obscure technical
-aspects of the ZSS file format; see the :class:`ZSS class <ZSS>` and
-:ref:`file format specification <format>` for details.
+aspects of the ZSS file format; see the documentation for the
+:class:`ZSS` class and the :ref:`file format specification <format>`
+for details.
 
 ``zss info`` is fast, even on arbitrarily large files, because it
 looks at only the header and the root index; it doesn't have to
@@ -138,19 +139,21 @@ records, like `NUL <https://en.wikipedia.org/wiki/Null_character>`_::
 $ zss dump tiny-4grams.zss --terminator="\x00"
 
 ...but putting the output from that into these docs would be hard to
-read, so let's demonstrate with something sillier:
+read. Instead we'll demonstrate with something sillier:
 
 .. command-output:: zss dump tiny-4grams.zss --terminator="XYZZY" --prefix="not done extensive "
    :cwd: example/
 
-But in general our records could contain *anything* we might choose to
-use as a terminator, so if we have an arbitrary ZSS file whose
-contents we know nothing about, then none of these options we've seen
-so far is guaranteed to work. The safest approach is to instead use a
-format in which each record is prefixed by its length. ``zss dump``
-can produce length-prefixed output with lengths encoded in either
-u64le or uleb128 format (see :ref:`integer-representations` for
-details about what these are).
+Of course, this will still have a problem if any of our records
+contained the string "XYZZY" -- in fact, our records could in theory
+contain *anything* we might choose to use as a terminator, so if we
+have an arbitrary ZSS file whose contents we know nothing about, then
+none of the options we've seen so far is guaranteed to work. The
+safest approach is to instead use a format in which each record is
+explicitly prefixed by its length. ``zss dump`` can produce
+length-prefixed output with lengths encoded in either u64le or uleb128
+format (see :ref:`integer-representations` for details about what
+these are).
 
 .. command-output:: zss dump tiny-4grams.zss --prefix="not done extensive " --length-prefixed=u64le | hd
    :cwd: example/
@@ -189,9 +192,9 @@ the per-block checksums, providing extremely strong protection against
 errors caused by disk failures, cosmic rays, and other such
 annoyances. However, this is not usually necessary, since the ``zss``
 commands and the :mod:`zss` library interface never return any data
-unless it passes a 64-bit checksum, meaning that even if you never run
-``zss validate``, you can still be sure that your results have not
-been corrupted by hardware errors.
+unless it passes a 64-bit checksum. With ZSS you can be sure that your
+results have not been corrupted by hardware errors, even if you never
+run ``zss validate`` at all.
 
 Full options:
 

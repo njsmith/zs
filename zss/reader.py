@@ -88,8 +88,8 @@ def _check_block(offset, raw_block, checksum):
     if encoded_crc64xz(raw_block) != checksum:
         raise ZSSCorrupt("checksum mismatch at %s" % (offset,))
     block_level = byte2int(raw_block[0])
-    zdata = raw_block[1:]
-    return (block_level, zdata)
+    zpayload = raw_block[1:]
+    return (block_level, zpayload)
 
 # exception that can be raised by map_raw_block callback functions
 class _ZSSMapStop(Exception):
@@ -102,18 +102,18 @@ class _ZSS_MAP_SKIP(object):
 
 def _map_raw_helper(offset, block_length, raw_block, checksum,
                     skip_index, start, stop, fn, args, kwargs):
-    block_level, zdata = _check_block(offset, raw_block, checksum)
+    block_level, zpayload = _check_block(offset, raw_block, checksum)
     if skip_index and block_level > 0:
         return _ZSS_MAP_SKIP
     if block_level >= FIRST_EXTENSION_LEVEL:
         return _ZSS_MAP_SKIP
-    return fn(offset, block_length, block_level, zdata, start, stop,
+    return fn(offset, block_length, block_level, zpayload, start, stop,
               *args, **kwargs)
 
 def _decompress_helper(offset, block_length,
-                       block_level, zdata, start, stop, decompress_fn):
+                       block_level, zpayload, start, stop, decompress_fn):
     # stopping has to be left to the next level up
-    return decompress_fn(zdata)
+    return decompress_fn(zpayload)
 
 def _trim_records(records, start, stop):
     if records[0] < start:
@@ -122,11 +122,11 @@ def _trim_records(records, start, stop):
         records = records[:bisect_left(records, stop)]
     return records
 
-def _block_map_helper(offset, block_length, block_level, zdata,
-                             start, stop, decompress_fn,
-                             user_fn, user_args, user_kwargs):
-    data = decompress_fn(zdata)
-    records = unpack_data_records(data)
+def _block_map_helper(offset, block_length, block_level, zpayload,
+                      start, stop, decompress_fn,
+                      user_fn, user_args, user_kwargs):
+    payload = decompress_fn(zpayload)
+    records = unpack_data_records(payload)
     if stop is not None and records[0] >= stop:
         raise _ZSSMapStop()
     records = _trim_records(records, start, stop)
@@ -143,9 +143,9 @@ def _dump_helper(records, terminator, length_prefixed):
         write_length_prefixed(out, records, length_prefixed)
         return out.getvalue()
 
-def _validate_helper(offset, block_length, block_level, zdata, start, stop,
+def _validate_helper(offset, block_length, block_level, zpayload, start, stop,
                  decompress_fn):
-    return (offset, block_length, block_level, decompress_fn(zdata))
+    return (offset, block_length, block_level, decompress_fn(zpayload))
 
 # A simple LRU cache. This has a somewhat awkward API because we don't want it
 # to ever hold a reference to the ZSS object, because that would create a
@@ -332,7 +332,7 @@ class ZSS(object):
             raise ZSSCorrupt("partial read on index block @ %s, length %s"
                              % (offset, block_length))
         raw_block, checksum = _get_raw_block_unchecked(BytesIO(chunk))
-        block_level, zdata = _check_block(offset, raw_block, checksum)
+        block_level, zpayload = _check_block(offset, raw_block, checksum)
         if block_level == 0:
             raise ZSSCorrupt("%s:%s: "
                              "expecting index block but found data block"
@@ -342,8 +342,8 @@ class ZSS(object):
                              "expecting index block but found "
                              "level %s extension block"
                              % (self._transport.name, offset, block_level))
-        data = self._decompress(zdata)
-        return (block_level, unpack_index_records(data))
+        payload = self._decompress(zpayload)
+        return (block_level, unpack_index_records(payload))
 
     # Returns offset of either the first or second data (level-0) block which
     # contains entries that are >= the needle.
@@ -541,7 +541,7 @@ class ZSS(object):
         It finds all blocks which may contain records that are >= start, and
         then for each such block it calls::
 
-          fn(offset, block_length, block_level, zdata, start, stop,
+          fn(offset, block_length, block_level, zpayload, start, stop,
              *args, **kwargs)
 
         Key points:
@@ -671,14 +671,14 @@ class ZSS(object):
 
         This will be most efficient if ``fn`` performs non-trivial work, and
         especially if it can avoid returning large/complicated structures from
-        ``fn`` -- the idea is that it should be *faster* for the code calling
-        ``block_map`` to process the results than it would have been to just
-        call ``search`` directly.
+        ``fn`` -- after all, the whole idea is that the code that's looping
+        over the results from :meth:`block_map` should have less work to do than
+        it would if it were just calling :meth:`search` directly.
 
         If you manage to take this to the extreme where you have nothing to
-        return from ``block_map`` (maybe your ``fn`` is writing to a database
-        or something), then you can use ``block_exec`` instead to save a bit
-        of boilerplate.
+        return from :meth:`block_map` (maybe your ``fn`` is writing to a
+        database or something), then you can use :meth:`block_exec` instead to
+        save a bit of boilerplate.
 
         If you pass ``parallelism=0`` when creating your :class:`ZSS` object,
         then this method will perform all work within the main process. This
@@ -697,9 +697,15 @@ class ZSS(object):
 
     def block_exec(self, fn, start=None, stop=None, prefix=None,
                    args=(), kwargs={}):
+        """Eager version of :meth:`block_map`.
+
+        This is equivalent to calling :meth:`block_map`, iterating over the
+        results, and throwing them all away.
+
+        """
         self._check_closed()
         with closing(self.block_map(fn, start, stop, prefix,
-                                           args, kwargs)) as it:
+                                    args, kwargs)) as it:
             for _ in it:
                 pass
 

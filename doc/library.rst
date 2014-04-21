@@ -6,8 +6,8 @@ The ``zss`` Python package
 Quickstart
 ----------
 
-Using the example file from the section on :ref:`zss make`, we can
-write:
+Using the example file we created when demonstrating :ref:`zss make`,
+we can write:
 
 .. ipython:: python
 
