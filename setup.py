@@ -30,12 +30,12 @@ if USE_CYTHON:
     ext_modules = cythonize(ext_modules)
 
 
-version_dict = {}
-execfile("zss/version.py", version_dict)
+# defines __version__
+exec(open("zss/version.py").read())
 
 setup(
     name="zss",
-    version=version_dict["__version__"],
+    version=__version__,
     description=DESC,
     long_description=LONG_DESC,
     author="Nathaniel J. Smith",
