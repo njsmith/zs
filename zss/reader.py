@@ -14,7 +14,7 @@ import weakref
 import hashlib
 import binascii
 
-from six import Iterator, BytesIO, byte2int, int2byte, reraise
+from six import Iterator, BytesIO, indexbytes, int2byte, reraise
 from six.moves import queue
 
 from .futures import SerialExecutor, ProcessPoolExecutor
@@ -58,9 +58,15 @@ def _decode_header_data(encoded):
         if field_format == "length-prefixed-utf8-json":
             length, = read_format(f, "<Q")
             data = read_n(f, length)
-            fields[field] = json.loads(data, encoding="utf-8")
+            chars = data.decode("utf-8")
+            fields[field] = json.loads(chars)
+        elif field_format == "NUL-padded-ascii-16":
+            value = read_format(f, "16s")[0]
+            value = value.rstrip(b"\x00")
+            value = value.decode("ascii")
+            fields[field] = value
         else:
-            fields[field], = read_format(f, field_format)
+            fields[field] = read_format(f, field_format)[0]
     return fields
 
 def _get_raw_block_unchecked(stream):
@@ -81,13 +87,13 @@ def test__get_raw_block_unchecked():
     from nose.tools import assert_raises
     f_partial1 = BytesIO(b"\x05" + b"\x01" * 4)
     assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial1)
-    f_partial2 = BytesIO(b"\x05" + b"\x01" * 5 + "\x02" * 3)
+    f_partial2 = BytesIO(b"\x05" + b"\x01" * 5 + b"\x02" * 3)
     assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial2)
 
 def _check_block(offset, raw_block, checksum):
     if encoded_crc64xz(raw_block) != checksum:
         raise ZSSCorrupt("checksum mismatch at %s" % (offset,))
-    block_level = byte2int(raw_block[0])
+    block_level = indexbytes(raw_block, 0)
     zpayload = raw_block[1:]
     return (block_level, zpayload)
 
@@ -238,7 +244,7 @@ class ZSS(object):
 
         self.root_index_offset = header["root_index_offset"]
         self.root_index_length = header["root_index_length"]
-        codec = header["codec"].rstrip(b"\x00")
+        codec = header["codec"]
         if codec not in codecs:
             raise ZSSCorrupt("unrecognized compression codec %r"
                              % (codec,))
@@ -398,7 +404,7 @@ class ZSS(object):
         # if-then-wrangling everywhere 'stop' is used.
         start = max(prefix, start)
         if prefix:
-            prefix_stop = prefix[:-1] + int2byte(byte2int(prefix[-1]) + 1)
+            prefix_stop = prefix[:-1] + int2byte(indexbytes(prefix, -1) + 1)
         else:
             prefix_stop = None
         if stop is None:
@@ -498,6 +504,9 @@ class ZSS(object):
 
         def result(self):
             reraise(*self._exc_info)
+
+        def cancel(self):
+            pass
 
     def _readahead_thread(self, stream, start, stop, skip_index,
                           fn, args, kwargs,

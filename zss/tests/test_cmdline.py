@@ -109,18 +109,19 @@ def test_validate():
 
     r = run(["validate", test_data_path("broken-files/unref-data.zss")],
             expected_returncode=1)
-    assert "unreferenced" in r.stdout
+    assert b"unreferenced" in r.stdout
 
 def test_info():
     with simple_zss() as p:
         out = run(["info", p])
-        info = json.loads(out.stdout)
+        info = json.loads(out.stdout.decode("ascii"))
         with ZSS(p) as z:
             assert info["codec"] == z.codec
             assert binascii.unhexlify(info["data_sha256"]) == z.data_sha256
             assert info["metadata"] == z.metadata
 
-        just_metadata = json.loads(run(["info", p, "--metadata-only"]).stdout)
+        just_metadata = json.loads(run(["info", p, "--metadata-only"]).stdout
+                                   .decode("ascii"))
         assert info["metadata"] == just_metadata
 
 def test_urls():
@@ -130,7 +131,10 @@ def test_urls():
 
         assert run(["dump", url]).stdout == run(["dump", path]).stdout
         run(["validate", url])
-        assert run(["info", url]).stdout == run(["info", path]).stdout
+        # can't compare stdout directly b/c of dict randomization
+        url_info = json.loads(run(["info", url]).stdout.decode("ascii"))
+        path_info = json.loads(run(["info", path]).stdout.decode("ascii"))
+        assert url_info == path_info
 
 def nothing(x):
     return None
@@ -168,7 +172,7 @@ def test_make():
         # codecs and compress level
         # some nice big input so that bz2 -1 and -9 will differ:
         bigger_input = b"\n".join([("%050i" % (i,)).encode("utf-8")
-                                   for i in xrange(10000)]
+                                   for i in range(10000)]
                                   + [b""])
         sizes = {}
         for settings in ["--codec=none",

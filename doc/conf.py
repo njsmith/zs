@@ -19,10 +19,13 @@ import os
 # installed, but the virtualenv bin/ dir is not on the path, so by default the
 # 'zss' command is not available to the programoutput extension. But we want
 # it to be. So fix that:
-if hasattr(sys, "real_prefix"):
+if (hasattr(sys, "real_prefix")
+    or sys.prefix != sys.getattr(sys, "base_prefix", sys.prefix)):
     # we're in a virtualenv and sys.prefix points to the virtualenv
     # directory. See:
     #     https://stackoverflow.com/questions/1871549/python-determine-if-running-inside-virtualenv
+    # (base_prefix is needed to also detect pyvenv environments -- future
+    # proofing!)
     os.environ["PATH"] = "%s/bin:%s" % (sys.prefix, os.environ["PATH"])
 
 # And let's also make sure our example file is not present, to avoid

@@ -19,7 +19,7 @@ from zss.common import read_length_prefixed, codecs
 # letters.zss contains records:
 #   [b, bb, d, dd, f, ff, ..., z, zz]
 letters_records = []
-for i in xrange(1, 26, 2):
+for i in range(1, 26, 2):
     letter = int2byte(byte2int(b"a") + i)
     letters_records += [letter, 2 * letter]
 
@@ -93,7 +93,7 @@ def check_letters_zss(z, codec):
             assert sum(map_blocks, []) == expected
 
             for term in [b"\n", b"\x00"]:
-                expected_dump = term.join(expected + [""])
+                expected_dump = term.join(expected + [b""])
                 out = BytesIO()
                 z.dump(out, start=start, stop=stop, prefix=prefix,
                        terminator=term)
@@ -305,7 +305,7 @@ def test_extension_blocks():
     # Check that the reader happily skips over the extension blocks in the
     # middle of the file.
     with ZSS(test_data_path("broken-files/good-extension-blocks.zss")) as z:
-        assert list(z) == ["a", "b", "c", "d"]
+        assert list(z) == [b"a", b"b", b"c", b"d"]
 
 def test_ref_loops():
     # Had a bunch of trouble eliminating reference loops in the ZSS object.
@@ -314,7 +314,7 @@ def test_ref_loops():
     z = ZSS(test_data_path("letters-none.zss"))
     try:
         # 1 for 'z', one for the temporary passed to sys.getrefcount
-        print sys.getrefcount(z)
+        print(sys.getrefcount(z))
         assert sys.getrefcount(z) == 2
         list(z)
         assert sys.getrefcount(z) == 2

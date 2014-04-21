@@ -7,7 +7,6 @@ import hashlib
 import os
 import os.path
 import multiprocessing
-import Queue
 import struct
 import sys
 import getpass
@@ -42,15 +41,25 @@ def _flush_file(f):
     os.fsync(f.fileno())
 
 def _encode_header(header):
-    bytes = []
+    enc_fields = []
     for (field, format) in header_data_format:
         if format == "length-prefixed-utf8-json":
-            encoded = json.dumps(header[field], ensure_ascii=True)
-            bytes.append(struct.pack("<Q", len(encoded)))
-            bytes.append(encoded)
+            # In py2, json.dumps always returns str if ensure_ascii=True (the
+            # default); if ensure_ascii=False it may or may not return a str
+            # at its whim. In py3, json.dumps always returns unicode.
+            str_encoded = json.dumps(header[field], ensure_ascii=True)
+            # On py3, this is necessary. On py2, this implicitly coerces to
+            # unicode and then encodes -- but because we know the string only
+            # contains ascii, the implicit conversion is safe.
+            encoded = str_encoded.encode("utf-8")
+            enc_fields.append(struct.pack("<Q", len(encoded)))
+            enc_fields.append(encoded)
+        elif format == "NUL-padded-ascii-16":
+            enc_fields.append(struct.pack("16s",
+                                          header[field].encode("ascii")))
         else:
-            bytes.append(struct.pack(format, header[field]))
-    return b"".join(bytes)
+            enc_fields.append(struct.pack(format, header[field]))
+    return b"".join(enc_fields)
 
 def test__encode_header():
     got = _encode_header({
@@ -59,16 +68,19 @@ def test__encode_header():
         "total_file_length": 0x0011223344556677,
         "sha256": b"abcdefghijklmnopqrstuvwxyz012345",
         "codec": "superzip",
-        "metadata": {"this": "is", "awesome": 10},
+        # Carefully chosen to avoid containing any dicts with multiple items,
+        # so as to ensure a consistent serialization in the face of dict
+        # randomization.
+        "metadata": {"this": ["is", "awesome", 10]},
         })
-    expected_metadata = b"{\"this\": \"is\", \"awesome\": 10}"
+    expected_metadata = b"{\"this\": [\"is\", \"awesome\", 10]}"
     expected = (b"\x56\x34\x12\x90\x78\x56\x34\x12"
                 b"\x31\x75\x57\x13\x42\x86\x68\x24"
                 b"\x77\x66\x55\x44\x33\x22\x11\x00"
                 b"abcdefghijklmnopqrstuvwxyz012345"
                 b"superzip\x00\x00\x00\x00\x00\x00\x00\x00"
-                # hex(len(expected_metadata)) == 0x1d
-                b"\x1d\x00\x00\x00\x00\x00\x00\x00"
+                # hex(len(expected_metadata)) == 0x1f
+                b"\x1f\x00\x00\x00\x00\x00\x00\x00"
                 + expected_metadata)
     assert got == expected
 
@@ -230,7 +242,7 @@ class ZSSWriter(object):
         self._finish_queue = multiprocessing.Queue(1)
         self._error_queue = multiprocessing.Queue()
         self._compressors = []
-        for i in xrange(parallelism):
+        for i in range(parallelism):
             compress_args = (self._compress_fn, self._codec_kwargs,
                              self._compress_queue, self._write_queue,
                              self._error_queue)
@@ -256,7 +268,7 @@ class ZSSWriter(object):
     def _check_error(self):
         try:
             box = self._error_queue.get_nowait()
-        except Queue.Empty:
+        except six.moves.queue.Empty:
             return
         else:
             self.close()
@@ -269,7 +281,7 @@ class ZSSWriter(object):
         while True:
             try:
                 q.put(obj, timeout=ERROR_CHECK_FREQ)
-            except Queue.Full:
+            except six.moves.queue.Full:
                 self._check_error()
             else:
                 break
@@ -400,7 +412,7 @@ class ZSSWriter(object):
             #     sys.stdout.write("\n")
             # sys.stdout.write("zss: Finished reading input; waiting for "
             #                  "write thread to catch up\n")
-            for i in xrange(self._parallelism):
+            for i in range(self._parallelism):
                 self._safe_put(self._compress_queue, _QUIT)
             for compressor in self._compressors:
                 self._safe_join(compressor)
@@ -578,7 +590,7 @@ class _ZSSDataAppender(object):
             assert level == len(self._level_entries)
             self._level_entries.append([])
             # This can only happen if all the previous levels just flushed.
-            for i in xrange(level):
+            for i in range(level):
                 assert not self._level_entries[i]
         entries = self._level_entries[level]
         entries.append((first_record, last_record,
@@ -627,7 +639,7 @@ class _ZSSDataAppender(object):
             raise ZSSError("cannot create empty ZSS file")
 
         while not have_root():
-            for level in xrange(FIRST_EXTENSION_LEVEL):
+            for level in range(FIRST_EXTENSION_LEVEL):
                 if self._level_entries[level]:
                     self._flush_index(level)
                     break

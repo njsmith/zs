@@ -14,8 +14,8 @@ def test_crc64xz():
     for (data, result) in [
             (b"123456789", 0x995dc9bbdf1939fa),
             ]:
-        print repr(data)
-        print hex(crc64xz(data))
+        print(repr(data))
+        print(hex(crc64xz(data)))
         assert result == crc64xz(data)
 
 def test_buf_write_uleb128():
@@ -71,7 +71,7 @@ def test_index_records():
     expected = (b"\x00\x00\x02"
                 + b"\x10" + b"\x00" * 16 + b"\x0a" + b"\x03"
                 + b"\x01a\xb9\x60\x04"
-                + "\x01b\x80\xa0\x94\xa5\x8d\x1d\x80\x40")
+                + b"\x01b\x80\xa0\x94\xa5\x8d\x1d\x80\x40")
     for alloc_hint in [1, 5, 100]:
         print("asdf")
         assert pack_index_records(records, offsets, block_lengths, alloc_hint

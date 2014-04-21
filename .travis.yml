@@ -1,6 +1,8 @@
 language: python
 python:
   - 2.7
+  - 3.3
+  - 3.4
 before_install:
   - sudo apt-get -qq install nginx
   # This has to be done to let it create some files that nginx insists must exist, yet only root can create.
@@ -17,9 +19,6 @@ install:
 script:
   # tell the tests that missing the 'zss' script is a hard-error
   - export ZSS_REQUIRE_SCRIPT_TEST=1
-  # The --exe is because python sometimes marks all installed modules
-  # as executable, so without --exe nosetests will just ignore
-  # everything. Baffling, but so it goes.
   - nosetests --all-modules --with-cov --cov-conf ./travis-coveragerc --cov-report term-missing --cov ${INSTALLDIR} zss
 after_success:
   - pip install coveralls && coveralls

@@ -59,8 +59,8 @@ Record framing options:
         out_file = sys.stdout
     else:
         out_file = open(opts["--output"], "wb")
-    if hasattr(out_file, "detach"):
-        out_file = out_file.detach()
+    if hasattr(out_file, "buffer"):
+        out_file = out_file.buffer
 
     with open_zss(opts) as z:
         z.dump(out_file,

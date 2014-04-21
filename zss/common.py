@@ -16,10 +16,10 @@ FIRST_EXTENSION_LEVEL = 64
 
 # "ZSS", three bytes from urandom, and 2 bytes to serve as a version
 # identifier in case that turns out to be useful.
-MAGIC = "ZSS\x1c\x8e\x6c\x00\x01"
+MAGIC = b"ZSS\x1c\x8e\x6c\x00\x01"
 # This is what we stick at the beginning of a file while we constructing it in
 # the first place, before it is complete and coherent.
-INCOMPLETE_MAGIC = "SSZ\x1c\x8e\x6c\x00\x01"
+INCOMPLETE_MAGIC = b"SSZ\x1c\x8e\x6c\x00\x01"
 header_data_length_format = "<Q"
 header_data_format = [
     # The offset of the top-level index block.
@@ -34,7 +34,7 @@ header_data_format = [
     #   "none"
     #   "deflate"
     #   "bzip2"
-    ("codec", "16s"),
+    ("codec", "NUL-padded-ascii-16"),
     # "<Q" giving length, then arbitrary utf8-encoded json
     ("metadata", "length-prefixed-utf8-json"),
     ]
@@ -143,10 +143,10 @@ def test_read_length_prefixed():
     assert got == [b"", b"a", b"bb"]
     from nose.tools import assert_raises
     assert_raises(ValueError, list,
-                  read_length_prefixed(BytesIO("b\x00"), "u64le"))
+                  read_length_prefixed(BytesIO(b"\x00"), "u64le"))
     assert_raises(ValueError, list,
                   read_length_prefixed(
-                      BytesIO("b\x02\x00\x00\x00\x00\x00\x00\x00a"), "u64le"))
+                      BytesIO(b"\x02\x00\x00\x00\x00\x00\x00\x00a"), "u64le"))
 
     assert (list(read_length_prefixed(
         BytesIO(b"\x00"
@@ -155,7 +155,7 @@ def test_read_length_prefixed():
                 b"\x80\x01" + (b"c" * 0x80)), "uleb128"))
             == [b"", b"a", b"bb", b"c" * 0x80])
     assert_raises(ValueError, list,
-                  read_length_prefixed(BytesIO("b\x02a"), "uleb128"))
+                  read_length_prefixed(BytesIO(b"\x02a"), "uleb128"))
 
     assert_raises(ValueError, list,
                   read_length_prefixed(BytesIO(), "asdfasdf"))

@@ -35,7 +35,7 @@ def _copy_to_stdout(handle):
         byte = handle.read(1)
         if not byte:
             break
-        sys.stdout.write(byte)
+        sys.stdout.write(byte.decode("ascii"))
 
 def find_port():
     # We used to just use a fixed port, but it turns out that because of
@@ -107,7 +107,7 @@ def nginx_server(root, error_exc=SkipTest):
     if nginx is None:  # pragma: no cover
         raise error_exc
     with tempname(".conf") as conf_path, tempname(".pid") as pid_path:
-        with open(conf_path, "wb") as conf:
+        with open(conf_path, "w") as conf:
             conf.write(
                 "daemon off;\n"
                 "worker_processes 1;\n"

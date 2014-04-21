@@ -18,7 +18,7 @@ from .util import tempname
 records = []
 # just in case of bugs, let's make sure to have an empty record
 records.append(b"")
-for i in xrange(1000):
+for i in range(1000):
     records.append((u"THIS IS RECORD # %08i" % (i,)).encode("utf-8"))
 # and a duplicate record
 records.append(b"ZZZ THIS RECORD IS REPEATED")
@@ -115,7 +115,7 @@ def test_writer_args():
 def test_no_overwrite():
     with temp_zss_path() as p:
         f = open(p, "wb")
-        f.write("hi\n")
+        f.write(b"hi\n")
         f.close()
 
         assert_raises(ZSSError, ZSSWriter, p, {}, 2)
@@ -196,10 +196,10 @@ def test_unsorted():
 
 def test_lengths():
     # exercise all the corner cases in the index packing code
-    for num_blocks in xrange(1, 2 ** 5):
+    for num_blocks in range(1, 2 ** 5):
         for branching_factor in [2, 3]:
             block_tmpls = [(u"%04i" % (i,)).encode("utf-8")
-                           for i in xrange(num_blocks)]
+                           for i in range(num_blocks)]
             records = []
             with temp_writer(branching_factor=branching_factor) as (p, zw):
                 for block_tmpl in block_tmpls:

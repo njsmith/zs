@@ -24,9 +24,9 @@ def check_transport(t):
 
     s = t.stream_read(0)
     assert s.tell() == 0
-    assert s.read(1) == contents[0]
+    assert s.read(1) == contents[0:1]
     assert s.tell() == 1
-    assert s.read(1) == contents[1]
+    assert s.read(1) == contents[1:2]
     assert s.tell() == 2
     assert s.read(4) == contents[2:6]
     assert s.tell() == 6
@@ -41,8 +41,8 @@ def check_transport(t):
 
     s = t.stream_read(10, 12)
     assert s.tell() == 10
-    assert s.read(1) == contents[10]
-    assert s.read(1) == contents[11]
+    assert s.read(1) == contents[10:11]
+    assert s.read(1) == contents[11:12]
     # might not continue past here, that's okay
 
     t.close()

@@ -35,8 +35,9 @@ Output will be valid JSON.
             info["root_index_offset"] = z.root_index_offset
             info["root_index_length"] = z.root_index_length
             info["total_file_length"] = z.total_file_length
-            info["codec"] = z.codec.strip("\x00").decode("ascii")
-            info["data_sha256"] = binascii.hexlify(z.data_sha256)
+            info["codec"] = z.codec
+            info["data_sha256"] = (binascii.hexlify(z.data_sha256)
+                                   .decode("ascii"))
             info["metadata"] = z.metadata
             info["statistics"] = OrderedDict()
             info["statistics"]["root_index_level"] = z.root_index_level
