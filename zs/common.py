@@ -14,12 +14,10 @@ CRC_LENGTH = 8
 # Reserve high levels for future extensions.
 FIRST_EXTENSION_LEVEL = 64
 
-# "ZS", three bytes from urandom, and 2 bytes to serve as a version
-# identifier in case that turns out to be useful.
-MAGIC = b"ZS\x1c\x8e\x6c\x00\x01"
+MAGIC = b"ZS file\x00"
 # This is what we stick at the beginning of a file while we constructing it in
 # the first place, before it is complete and coherent.
-INCOMPLETE_MAGIC = b"SSZ\x1c\x8e\x6c\x00\x01"
+INCOMPLETE_MAGIC = b"ZSlater\x00"
 header_data_length_format = "<Q"
 header_data_format = [
     # The offset of the top-level index block.

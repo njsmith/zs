@@ -151,11 +151,11 @@ valid ZS file begins with 8 `magic bytes
 <https://en.wikipedia.org/wiki/File_format#Magic_number>`_. Specifically,
 these ones (written in hex)::
 
-  5a 53 53 1c 8e 6c 00 01    # Good magic
+  5a 53 20 66 69 6c 65 00   # Good magic
 
-This is the ascii string ``ZS``, followed by 3 random bytes,
-followed by two bytes which might be used as a version identifier in
-case there is ever a ZS version 2.
+This is the ascii string ``ZS file``, followed by a null byte. If
+there's ever a ZS version 2, we'll use this last byte as a version
+number.
 
 Writing out a large ZS file is a somewhat involved operation that
 might take a long time. It's possible for a hardware or software
@@ -169,21 +169,20 @@ operation had completed, to know whether we can trust the file left
 behind. Therefore we also define a second magic number to be used
 specifically for partial ZS files::
 
-  53 53 5a 1c 8e 6c 00 01    # Bad magic
+  5a 53 6c 61 74 65 72 00   # Bad magic
 
-This is the same as the regular magic value, except that the string
-``ZS`` has been replaced by ``SSZ``.
+This is the ascii string ``ZSlater`` followed by a null byte.
 
 It is strongly recommended that ZS file writers perform the following
 sequence:
 
-* Write out the ``SSZ`` magic number.
+* Write out the ``ZSlater`` magic number.
 * Write out the rest of the ZS file.
 * Update the header to its final form (including, e.g., the offset of
   the root block).
 * (IMPORTANT) Sync the file to disk using ``fsync()`` or equivalent.
-* Replace the ``SSZ`` magic number with the correct ``ZS`` magic
-  number.
+* Replace the ``ZSlater`` magic number with the correct
+  ``ZS file`` magic number.
 
 Following this procedure guarantees that, modulo disk corruption, any
 file which begins with the correct ZS magic will in fact be a
@@ -191,9 +190,9 @@ complete, valid ZS file.
 
 Any file which does not begin with the correct ZS magic is not a
 valid ZS file, and should be rejected by ZS file readers. Files with
-the ``SSZ`` magic are not valid ZS files. However, polite ZS readers
-should generally check for the ``SSZ`` magic, and if encountered,
-provide a more informative error message while rejecting the file.
+the ``ZSlater`` magic are not valid ZS files. However, polite ZS readers
+should generally check for the ``ZSlater`` magic, and if encountered,
+provide an informative error message while rejecting the file.
 
 
 .. _format-header:
