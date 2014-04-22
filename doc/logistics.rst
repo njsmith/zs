@@ -2,10 +2,10 @@ Logistics
 =========
 
 Documentation:
-  http://zss.readthedocs.org/
+  http://zs.readthedocs.org/
 
 Downloads:
-  http://pypi.python.org/pypi/zss/ [TODO]
+  http://pypi.python.org/pypi/zs/ [TODO]
 
 Dependencies:
   * Python 2.7, or Python 3.3+
@@ -22,12 +22,12 @@ Developer dependencies (only needed for hacking on source):
   * nginx: needed to run HTTP tests
 
 Install:
-  ``pip install zss``
+  ``pip install zs``
 
   (Or, for traditionalists: ``python setup.py install``)
 
 Code and bug tracker:
-  https://github.com/njsmith/zss
+  https://github.com/njsmith/zs
 
 Contact:
   Nathaniel J. Smith <nathaniel.smith@ed.ac.uk>

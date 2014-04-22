@@ -1,4 +1,4 @@
-ZSS is a simple, read-only, binary file format designed for
+ZS is a simple, read-only, binary file format designed for
 distributing, querying, and archiving very large collections of
 arbitrary binary values (up to tens of terabytes and beyond). It
 allows the data to be stored in compressed form, while still
@@ -14,16 +14,16 @@ It was originally developed to be a better format for working with the
 but may be useful in any case where you need a convenient way to stash
 a small or large data set in a convenient form.
 
-.. image:: https://travis-ci.org/njsmith/zss.png?branch=master
-   :target: https://travis-ci.org/njsmith/zss
-.. image:: https://coveralls.io/repos/njsmith/zss/badge.png?branch=master
-   :target: https://coveralls.io/r/njsmith/zss?branch=master
+.. image:: https://travis-ci.org/njsmith/zs.png?branch=master
+   :target: https://travis-ci.org/njsmith/zs
+.. image:: https://coveralls.io/repos/njsmith/zs/badge.png?branch=master
+   :target: https://coveralls.io/r/njsmith/zs?branch=master
 
 Documentation:
-  http://zss.readthedocs.org/
+  http://zs.readthedocs.org/
 
 Downloads:
-  http://pypi.python.org/pypi/zss/ [TODO]
+  http://pypi.python.org/pypi/zs/ [TODO]
 
 Dependencies:
   * Python 2.7, or Python 3.3+
@@ -40,10 +40,10 @@ Developer dependencies (only needed for hacking on source):
   * nginx: needed to run HTTP tests
 
 Install:
-  ``pip install zss`` (or, for traditionalists: ``python setup.py install``)
+  ``pip install zs`` (or, for traditionalists: ``python setup.py install``)
 
 Code and bug tracker:
-  https://github.com/njsmith/zss
+  https://github.com/njsmith/zs
 
 Mailing list:
   * TODO

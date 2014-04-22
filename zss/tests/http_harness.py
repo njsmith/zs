@@ -1,8 +1,8 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
-# We can't use HTTPSimpleServer for testing ZSS-over-HTTP, because
+# We can't use HTTPSimpleServer for testing ZS-over-HTTP, because
 # HTTPSimpleServer doesn't support Range requests. So instead this file sets
 # up a little harness for spawning a little temporary static-only
 # localhost-only nginx server.

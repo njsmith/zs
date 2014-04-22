@@ -17,7 +17,7 @@ if USE_CYTHON:
 else:
     cython_ext = "c"
 ext_modules = [
-    Extension("zss._zss", ["zss/_zss.%s" % (cython_ext,)])
+    Extension("zs._zs", ["zs/_zs.%s" % (cython_ext,)])
 ]
 if USE_CYTHON:
     from Cython.Build import cythonize
@@ -26,16 +26,16 @@ if USE_CYTHON:
 
 
 # defines __version__
-exec(open("zss/version.py").read())
+exec(open("zs/version.py").read())
 
 setup(
-    name="zss",
+    name="zs",
     version=__version__,
     description=DESC,
     long_description=LONG_DESC,
     author="Nathaniel J. Smith",
     author_email="njs@pobox.com",
-    url="https://github.com/njsmith/zss",
+    url="https://github.com/njsmith/zs",
     license="2-clause BSD",
     classifiers =
       [ "Development Status :: 4 - Beta",
@@ -46,7 +46,7 @@ setup(
         "Programming Language :: Python :: 3",
         ],
     packages=find_packages(),
-    # This means, just install *everything* you see under zss/, even if it
+    # This means, just install *everything* you see under zs/, even if it
     # doesn't look like a source file, so long as it appears in MANIFEST.in:
     include_package_data=True,
     # This lets us list some specific things we don't want installed, the
@@ -62,13 +62,13 @@ setup(
                           # pretending not to)".  This may get fixed at some
                           # point:
                           #   http://bugs.python.org/issue19286
-                          "zss.tests": ["data",
+                          "zs.tests": ["data",
                                         "data/broken-files",
                                         "data/http-test",
                                     ]},
     entry_points={
         "console_scripts": [
-            "zss = zss.cmdline.main:entrypoint",
+            "zs = zs.cmdline.main:entrypoint",
             ],
     },
     install_requires=["six", "requests", "docopt"],

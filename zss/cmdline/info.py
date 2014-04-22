@@ -1,4 +1,4 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -7,17 +7,17 @@ import binascii
 from collections import OrderedDict
 
 import json
-from .util import open_zss
+from .util import open_zs
 
 def command_info(opts):
-    """Display general information from a .zss file's header.
+    """Display general information from a .zs file's header.
 
 Usage:
-  zss info [--metadata-only] [--] <zss_file>
-  zss info --help
+  zs info [--metadata-only] [--] <zs_file>
+  zs info --help
 
 Arguments:
-  <zss_file>  Path or URL pointing to a .zss file. An argument beginning with
+  <zs_file>  Path or URL pointing to a .zs file. An argument beginning with
               the four characters "http" will be treated as a URL.
 
 Options:
@@ -27,7 +27,7 @@ Options:
 Output will be valid JSON.
 """
 
-    with open_zss(opts) as z:
+    with open_zs(opts) as z:
         if opts["--metadata-only"]:
             info = z.metadata
         else:

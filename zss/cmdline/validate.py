@@ -1,20 +1,20 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
 import sys
 
-from zss import ZSSCorrupt
-from .util import open_zss
+from zs import ZSCorrupt
+from .util import open_zs
 
 def command_validate(opts):
-    """Check a .zss file for errors or data corruption.
+    """Check a .zs file for errors or data corruption.
 
 Usage:
-  zss validate [-j PARALLELISM] [--] <zss_file>
+  zs validate [-j PARALLELISM] [--] <zs_file>
 
 Arguments:
-  <zss_file>  Path or URL pointing to a .zss file. An argument beginning with
+  <zs_file>  Path or URL pointing to a .zs file. An argument beginning with
               the four characters "http" will be treated as a URL.
 
 Options:
@@ -22,10 +22,10 @@ Options:
                              [default: all cpus]
 """
     #import pdb; pdb.set_trace()
-    with open_zss(opts) as z:
+    with open_zs(opts) as z:
         try:
             z.validate()
-        except ZSSCorrupt as e:
+        except ZSCorrupt as e:
             sys.stdout.write(str(e))
             sys.stdout.write("\n")
             return 1

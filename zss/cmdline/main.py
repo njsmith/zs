@@ -1,4 +1,4 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -14,7 +14,7 @@ import codecs
 import six
 from docopt import docopt, DocoptExit
 
-import zss
+import zs
 
 from .util import optfail
 
@@ -67,24 +67,24 @@ subcommands["make"] = command_make
 
 # args = argv[1:]
 def main(args):
-    """ZSS: a space-efficient file format format for distributing, archiving,
+    """ZS: a space-efficient file format format for distributing, archiving,
 and querying large data sets.
 
 Usage:
-  zss <subcommand> [<args>...]
-  zss --version
-  zss --help
+  zs <subcommand> [<args>...]
+  zs --version
+  zs --help
 
 Available subcommands:
-  zss dump      Get contents of a .zss file.
-  zss info      Get general metadata about a .zss file.
-  zss validate  Check a .zss file for validity.
-  zss make      Create a new .zss file with specified contents.
+  zs dump      Get contents of a .zs file.
+  zs info      Get general metadata about a .zs file.
+  zs validate  Check a .zs file for validity.
+  zs make      Create a new .zs file with specified contents.
 
-For details, use 'zss <subcommand> --help'.
+For details, use 'zs <subcommand> --help'.
 """
 
-    opts = fixed_docopt(main.__doc__, argv=args, version=zss.__version__,
+    opts = fixed_docopt(main.__doc__, argv=args, version=zs.__version__,
                         options_first=True)
     # docopt handles --help and --version for us
     subcommand = opts["<subcommand>"]

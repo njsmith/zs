@@ -8,7 +8,7 @@ import bz2
 import zlib
 import time
 
-from zss._zss import pack_data_block
+from zs._zs import pack_data_block
 
 test_path = sys.argv[1]
 

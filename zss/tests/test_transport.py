@@ -1,11 +1,11 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
 from nose.tools import assert_raises
 from requests import HTTPError
 
-from zss import ZSSError
+from zs import ZSError
 from .util import test_data_path
 from .http_harness import web_server, simplehttpserver
 from ..transport import FileTransport, HTTPTransport
@@ -81,5 +81,5 @@ def test_HTTPTransport():
                     range_support=False) as base_url:
         url = base_url + "/alphabet"
         ht = HTTPTransport(url)
-        assert_raises(ZSSError, ht.chunk_read, 10, 1)
-        assert_raises(ZSSError, ht.stream_read, 10)
+        assert_raises(ZSError, ht.chunk_read, 10, 1)
+        assert_raises(ZSError, ht.stream_read, 10)

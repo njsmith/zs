@@ -1,19 +1,19 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
 import sys
 import json
 
-from zss import ZSSWriter
+from zs import ZSWriter
 from .util import optfail
 
 def command_make(opts):
-    """Create a new .zss file.
+    """Create a new .zs file.
 
 Usage:
-  zss make <metadata> <input_file> <new_zss_file>
-  zss make [--terminator TERMINATOR | --length-prefixed=TYPE]
+  zs make <metadata> <input_file> <new_zs_file>
+  zs make [--terminator TERMINATOR | --length-prefixed=TYPE]
            [-j PARALLELISM]
            [--no-spinner]
            [--branching-factor=FACTOR]
@@ -21,28 +21,28 @@ Usage:
            [--codec=CODEC] [-z COMPRESS-LEVEL]
            [--no-default-metadata]
            [--]
-           <metadata> <input_file> <new_zss_file>
-  zss make --help
+           <metadata> <input_file> <new_zs_file>
+  zs make --help
 
 Arguments:
 
   <metadata>      Arbitrary JSON-encoded metadata that will be stored in your
-                  new ZSS file. This must be a JSON "object", i.e., the
+                  new ZS file. This must be a JSON "object", i.e., the
                   outermost characters have to be {}. If you're just messing
                   about, then you can just use "{}" here and be done, but for
                   any file that will live for long then we strongly recommend
                   adding more details about what this file is. See the
-                  "Metadata conventions" section of the ZSS manual for more
+                  "Metadata conventions" section of the ZS manual for more
                   information.
 
   <input_file>    A file containing the records to be packed into the
-                  new .zss file. Use "-" for stdin. Records must already be
+                  new .zs file. Use "-" for stdin. Records must already be
                   sorted in ASCIIbetical order. You may want to do something
                   like:
-                    cat myfile.txt | env LC_ALL=C sort | zss make - myfile.zss
+                    cat myfile.txt | env LC_ALL=C sort | zs make - myfile.zs
 
-  <new_zss_file>  The file to create. Conventionally uses the file extension
-                  ".zss".
+  <new_zs_file>  The file to create. Conventionally uses the file extension
+                  ".zs".
 
 Input file options:
   --terminator=TERMINATOR    Treat the input file as containing a series of
@@ -74,7 +74,7 @@ Output file options:
   -z COMPRESS-LEVEL, --compress-level=COMPRESS-LEVEL
                              Degree of compression to use. (Default: 6 for
                              deflate, 9 for bz2.)
-  --no-default-metadata      By default, 'zss make' adds an extra "build-info"
+  --no-default-metadata      By default, 'zs make' adds an extra "build-info"
                              key to the metadata, recording the time, host,
                              and user who created the file. This option
                              disables this behaviour.
@@ -90,9 +90,9 @@ Output file options:
     if "__compress-level__" in opts:
         codec_kwargs["compress_level"] = opts["__compress-level__"]
 
-    sys.stdout.write("zss: Opening new ZSS file: %s\n"
-                     % (opts["<new_zss_file>"],))
-    with ZSSWriter(opts["<new_zss_file>"],
+    sys.stdout.write("zs: Opening new ZS file: %s\n"
+                     % (opts["<new_zs_file>"],))
+    with ZSWriter(opts["<new_zs_file>"],
                    metadata=metadata,
                    branching_factor=opts["__branching-factor__"],
                    parallelism=opts["__j__"],
@@ -101,7 +101,7 @@ Output file options:
                    show_spinner=not opts["--no-spinner"],
                    include_default_metadata=not opts["--no-default-metadata"],
                ) as out_z:
-        sys.stdout.write("zss: Reading input file: %s\n"
+        sys.stdout.write("zs: Reading input file: %s\n"
                          % (opts["<input_file>"],))
         sys.stdout.flush()
         if opts["<input_file>"] == "-":
@@ -115,6 +115,6 @@ Output file options:
                                 terminator=opts["__terminator__"],
                                 length_prefixed=opts["--length-prefixed"])
         out_z.finish()
-        sys.stdout.write("zss: Done.\n")
+        sys.stdout.write("zs: Done.\n")
 
     return 0

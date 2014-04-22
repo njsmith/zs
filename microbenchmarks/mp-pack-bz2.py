@@ -10,7 +10,7 @@
 import sys
 import bz2
 from multiprocessing import Process, Queue
-from zss._zss import pack_data_records
+from zs._zs import pack_data_records
 
 QUIT = None
 

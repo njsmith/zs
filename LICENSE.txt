@@ -1,7 +1,7 @@
-The ZSS reference implementation is distributed under a simple
+The ZS reference implementation is distributed under a simple
 2-clause BSD license:
 
-    Copyright (C) 2013-2014, ZSS Developers. All rights reserved.
+    Copyright (C) 2013-2014, ZS Developers. All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
     modification, are permitted provided that the following conditions are

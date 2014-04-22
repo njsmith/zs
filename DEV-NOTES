@@ -1,17 +1,17 @@
 * To run a quick set of tests:
 
 python setup.py build_ext -i
-ZSS_QUICK_TEST=1 nosetests --all-modules zss
+ZS_QUICK_TEST=1 nosetests --all-modules zs
 
 * To run a complete set of tests with HTML coverage output:
 
-nosetests --all-modules --with-cov --cov-conf .coveragerc --cov-report term-missing --cov-report html zss
+nosetests --all-modules --with-cov --cov-conf .coveragerc --cov-report term-missing --cov-report html zs
 
 * windows compilation
 https://github.com/cython/cython/wiki/64BitCythonExtensionsOnWindows
 https://matthew-brett.github.io/pydagogue/python_msvc.html
 * Next
 
-** zsscontrib
+** zscontrib
 
 ** windows wheels?

@@ -1,19 +1,19 @@
-The ``zss`` Python package
+The ``zs`` Python package
 ==========================
 
-.. module:: zss
+.. module:: zs
 
 Quickstart
 ----------
 
-Using the example file we created when demonstrating :ref:`zss make`,
+Using the example file we created when demonstrating :ref:`zs make`,
 we can write:
 
 .. ipython:: python
 
-   from zss import ZSS
+   from zs import ZS
 
-   z = ZSS("example/tiny-4grams.zss")
+   z = ZS("example/tiny-4grams.zs")
 
    for record in z:
        print(record)
@@ -32,20 +32,20 @@ we can write:
 Error reporting
 ---------------
 
-:mod:`zss` defines two exception types.
+:mod:`zs` defines two exception types.
 
-.. autoexception:: ZSSError
+.. autoexception:: ZSError
 
-.. autoexception:: ZSSCorrupt
+.. autoexception:: ZSCorrupt
 
 
 Reading
 -------
 
-Reading ZSS files is accomplished by instantiating an object of type
-:class:`ZSS`:
+Reading ZS files is accomplished by instantiating an object of type
+:class:`ZS`:
 
-.. autoclass:: ZSS
+.. autoclass:: ZS
 
    .. rubric:: Basic searches
 
@@ -56,12 +56,12 @@ Reading ZSS files is accomplished by instantiating an object of type
    .. rubric:: Metadata access
 
    This class provides a number of read-only attributes that give
-   general information about the ZSS file:
+   general information about the ZS file:
 
    .. attribute:: metadata
       :annotation:
 
-      A .zss file can contain arbitrary metadata in the form of a
+      A .zs file can contain arbitrary metadata in the form of a
       JSON-encoded dictionary. This attribute contains this metadata in
       unpacked form.
 
@@ -116,12 +116,12 @@ Reading ZSS files is accomplished by instantiating an object of type
 Writing
 -------
 
-In case you want a little more control over ZSS file writing than you
-can get with the ``zss make`` command-line utility (see :ref:`zss
-make`), you can also access the underlying ZSS-writing code directly
-from Python by instantiating a :class:`ZSSWriter` object.
+In case you want a little more control over ZS file writing than you
+can get with the ``zs make`` command-line utility (see :ref:`zs
+make`), you can also access the underlying ZS-writing code directly
+from Python by instantiating a :class:`ZSWriter` object.
 
-.. autoclass:: ZSSWriter
+.. autoclass:: ZSWriter
 
    .. automethod:: add_data_block
 
@@ -133,4 +133,4 @@ from Python by instantiating a :class:`ZSSWriter` object.
 
    .. attribute:: closed
 
-      Boolean attribute indicating whether this ZSSWriter is closed.
+      Boolean attribute indicating whether this ZSWriter is closed.

@@ -1,11 +1,11 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
 # TODO:
-# - add simple 'zss' test directly to .travis.yml
+# - add simple 'zs' test directly to .travis.yml
 #     or just have travis.yml set a variable we check here?
-#     try running test with skip if zss not on path
+#     try running test with skip if zs not on path
 #       and if var is set then fail instead of skip
 import sys
 import subprocess
@@ -19,20 +19,20 @@ from unittest.case import SkipTest
 
 from six import BytesIO
 
-import zss
-from zss import ZSS, ZSSWriter
+import zs
+from zs import ZS, ZSWriter
 from .util import tempname, test_data_path
 from .http_harness import web_server
 
 RunResult = namedtuple("RunResult", ["returncode", "stdout", "stderr"])
 
-# To let the test suite run without installing, we only try the '-m zss'
-# version, not the 'zss' script itself. .travis.yml has a little test to make
-# sure that setup.py does install the 'zss' script.
-CMD = [sys.executable, "-m", "zss"]
+# To let the test suite run without installing, we only try the '-m zs'
+# version, not the 'zs' script itself. .travis.yml has a little test to make
+# sure that setup.py does install the 'zs' script.
+CMD = [sys.executable, "-m", "zs"]
 
-def run(args, expected_returncode=0, input=b"", zss_cmd=CMD):
-    p = subprocess.Popen(zss_cmd + args,
+def run(args, expected_returncode=0, input=b"", zs_cmd=CMD):
+    p = subprocess.Popen(zs_cmd + args,
                          stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
@@ -53,9 +53,9 @@ RECORDS = [b"", b"a", b"b", b"bb", b"c"]
 NEWLINE_RECORDS = b"\n".join(RECORDS + [b""])
 
 @contextmanager
-def simple_zss(records=RECORDS):
-    with tempname(".zss", unlink_first=True) as p:
-        with ZSSWriter(p, {"temp": 1}, 2) as zw:
+def simple_zs(records=RECORDS):
+    with tempname(".zs", unlink_first=True) as p:
+        with ZSWriter(p, {"temp": 1}, 2) as zw:
             zw.add_data_block(records)
             zw.finish()
         yield p
@@ -66,7 +66,7 @@ def test_basic():
     assert b"subcommands" in run(["--help"]).stdout
 
 def test_dump():
-    with simple_zss() as p:
+    with simple_zs() as p:
         assert run(["dump", p]).stdout == NEWLINE_RECORDS
         assert run(["dump", p, "--prefix=b"]).stdout == b"b\nbb\n"
         assert run(["dump", p, "--prefix=z"]).stdout == b""
@@ -96,7 +96,7 @@ def test_dump():
         # ditto for -j
         run(["dump", p, "-j", "asdf"], expected_returncode=2)
 
-    with simple_zss([b"\x00", b"\x01", b"\x01a", b"\x02"]) as p:
+    with simple_zs([b"\x00", b"\x01", b"\x01a", b"\x02"]) as p:
         assert (run(["dump", p, "--length-prefixed=uleb128"]).stdout
                 == b"\x01\x00\x01\x01\x02\x01a\x01\x02")
         assert (run(["dump", p,
@@ -105,17 +105,17 @@ def test_dump():
                 == b"\x01\x01\x02\x01a")
 
 def test_validate():
-    run(["validate", test_data_path("letters-none.zss")])
+    run(["validate", test_data_path("letters-none.zs")])
 
-    r = run(["validate", test_data_path("broken-files/unref-data.zss")],
+    r = run(["validate", test_data_path("broken-files/unref-data.zs")],
             expected_returncode=1)
     assert b"unreferenced" in r.stdout
 
 def test_info():
-    with simple_zss() as p:
+    with simple_zs() as p:
         out = run(["info", p])
         info = json.loads(out.stdout.decode("ascii"))
-        with ZSS(p) as z:
+        with ZS(p) as z:
             assert info["codec"] == z.codec
             assert binascii.unhexlify(info["data_sha256"]) == z.data_sha256
             assert info["metadata"] == z.metadata
@@ -126,8 +126,8 @@ def test_info():
 
 def test_urls():
     with web_server(test_data_path()) as root_url:
-        url = root_url + "/letters-none.zss"
-        path = test_data_path("letters-none.zss")
+        url = root_url + "/letters-none.zs"
+        path = test_data_path("letters-none.zs")
 
         assert run(["dump", url]).stdout == run(["dump", path]).stdout
         run(["validate", url])
@@ -140,32 +140,32 @@ def nothing(x):
     return None
 
 def test_make():
-    from .test_writer import records as big_records, temp_zss_path
+    from .test_writer import records as big_records, temp_zs_path
 
-    with simple_zss(big_records) as p_in:
+    with simple_zs(big_records) as p_in:
         for format_opt in ["--terminator=\\n",
                            "--terminator=\\x00",
                            "--length-prefixed=uleb128",
                            "--length-prefixed=u64le",
                           ]:
             input = run(["dump", p_in, format_opt]).stdout
-            with temp_zss_path() as p_out:
+            with temp_zs_path() as p_out:
                 run(["make", format_opt, "{}", "-", p_out], input=input)
 
-                with ZSS(p_out) as z:
+                with ZS(p_out) as z:
                     z.validate()
                     assert list(z) == big_records
 
         big_input = b"\n".join(big_records + [b""])
 
         # smoke test -j
-        with temp_zss_path() as p_out:
+        with temp_zs_path() as p_out:
             run(["make", "{}", "-", p_out, "-j", "3"], input=NEWLINE_RECORDS)
 
         # --no-spinner produces less chatter
-        with temp_zss_path() as p_out:
+        with temp_zs_path() as p_out:
             r1 = run(["make", "{}", "-", p_out], input=big_input)
-        with temp_zss_path() as p_out:
+        with temp_zs_path() as p_out:
             r2 = run(["make", "{}", "-", p_out, "--no-spinner"],
                      input=big_input)
         assert len(r2.stdout) < len(r1.stdout)
@@ -181,7 +181,7 @@ def test_make():
                          "--codec=bz2 -z 1",
                          "--codec=deflate",
                          "--codec=deflate --compress-level 1"]:
-            with temp_zss_path() as p_out:
+            with temp_zs_path() as p_out:
                 run(["make", "{}", "-", p_out] + settings.split(),
                     input=bigger_input)
                 sizes[settings] = os.stat(p_out).st_size
@@ -193,13 +193,13 @@ def test_make():
 
         # metadata and no-default-metadata
         for no_default in [True, False]:
-            with temp_zss_path() as p_out:
+            with temp_zs_path() as p_out:
                 args = []
                 if no_default:
                     args.append("--no-default-metadata")
                 run(["make", "{\"foo\": 1}", "-", p_out] + args,
                     input=NEWLINE_RECORDS)
-                with ZSS(p_out) as z:
+                with ZS(p_out) as z:
                     assert z.metadata["foo"] == 1
                     if no_default:
                         assert "build-info" not in z.metadata
@@ -207,20 +207,20 @@ def test_make():
                         assert "build-info" in z.metadata
 
         # approx-block-size
-        with temp_zss_path() as p_small, temp_zss_path() as p_big:
+        with temp_zs_path() as p_small, temp_zs_path() as p_big:
             run(["make", "{}", "-", p_small, "--approx-block-size", "1000"],
                 input=big_input)
             run(["make", "{}", "-", p_big, "--approx-block-size", "10000"],
                 input=big_input)
 
-            with ZSS(p_small) as z_small, ZSS(p_big) as z_big:
+            with ZS(p_small) as z_small, ZS(p_big) as z_big:
                 assert list(z_small) == list(z_big)
                 # count how many blocks are in each file
                 assert (len(list(z_small.block_map(nothing)))
                         > len(list(z_big.block_map(nothing))))
 
         # branching-factor
-        with temp_zss_path() as p_b2, temp_zss_path() as p_b100:
+        with temp_zs_path() as p_b2, temp_zs_path() as p_b100:
             run(["make", "{}", "-", p_b2, "--approx-block-size", "1000",
                  "--branching-factor", "2"],
                 input=big_input)
@@ -228,42 +228,42 @@ def test_make():
                  "--branching-factor", "100"],
                 input=big_input)
 
-            with ZSS(p_b2) as z_b2, ZSS(p_b100) as z_b100:
+            with ZS(p_b2) as z_b2, ZS(p_b100) as z_b100:
                 assert list(z_b2) == list(z_b100)
                 assert z_b2.root_index_level > z_b100.root_index_level
 
         # from file, not just stdin
-        with tempname(".txt") as in_p, temp_zss_path() as out_p:
+        with tempname(".txt") as in_p, temp_zs_path() as out_p:
             with open(in_p, "wb") as in_f:
                 in_f.write(big_input)
             run(["make", "{}", in_p, out_p])
 
-            with ZSS(out_p) as z:
+            with ZS(out_p) as z:
                 assert list(z) == big_records
 
         # integer checking
         for opt in ["--branching-factor", "--approx-block-size",
                     "--compress-level", "-z"]:
-            with temp_zss_path() as p:
+            with temp_zs_path() as p:
                 run(["make", "{}", "-", p, opt, "NOT-AN-INT"],
                     input=NEWLINE_RECORDS,
                     expected_returncode=2)
         # bad json
-        with temp_zss_path() as p:
+        with temp_zs_path() as p:
             run(["make", "{}", "-", p, "--metadata", "{"],
                 input=NEWLINE_RECORDS,
                 expected_returncode=2)
 
 def test_script_entry_point():
-    # the above tests are all run using "python -m zss foo"; this tests that
-    # "zss foo" also works -- but only if we are actually installed.
+    # the above tests are all run using "python -m zs foo"; this tests that
+    # "zs foo" also works -- but only if we are actually installed.
     expected = run(["--help"]).stdout
     try:
-        got = run(["--help"], zss_cmd=["zss"]).stdout
+        got = run(["--help"], zs_cmd=["zs"]).stdout
     except OSError:
-        if "ZSS_REQUIRE_SCRIPT_TEST" in os.environ:
+        if "ZS_REQUIRE_SCRIPT_TEST" in os.environ:
             raise
         else:
-            raise SkipTest("'zss' script not found")
+            raise SkipTest("'zs' script not found")
 
     assert expected == got

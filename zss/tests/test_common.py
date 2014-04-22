@@ -1,4 +1,4 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -35,7 +35,7 @@ def test_codecs():
 def test_read_n():
     f = six.BytesIO(b"abcde")
     assert read_n(f, 3) == b"abc"
-    assert_raises(ZSSCorrupt, read_n, f, 3)
+    assert_raises(ZSCorrupt, read_n, f, 3)
 
 def test_read_format():
     f = six.BytesIO(b"\x01\x02\x03")

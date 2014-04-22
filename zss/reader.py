@@ -1,4 +1,4 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -18,8 +18,8 @@ from six import Iterator, BytesIO, indexbytes, int2byte, reraise
 from six.moves import queue
 
 from .futures import SerialExecutor, ProcessPoolExecutor
-from .common import (ZSSError,
-                     ZSSCorrupt,
+from .common import (ZSError,
+                     ZSCorrupt,
                      MAGIC,
                      INCOMPLETE_MAGIC,
                      FIRST_EXTENSION_LEVEL,
@@ -31,7 +31,7 @@ from .common import (ZSSError,
                      read_n,
                      read_format,
                      write_length_prefixed)
-from ._zss import (unpack_data_records, unpack_index_records, read_uleb128)
+from ._zs import (unpack_data_records, unpack_index_records, read_uleb128)
 from .transport import FileTransport, HTTPTransport
 
 # How much data to read from the header on our first request on slow
@@ -78,7 +78,7 @@ def _get_raw_block_unchecked(stream):
     block_contents = stream.read(length)
     checksum = stream.read(CRC_LENGTH)
     if len(block_contents) != length or len(checksum) != CRC_LENGTH:
-        raise ZSSCorrupt("unexpected EOF")
+        raise ZSCorrupt("unexpected EOF")
     return block_contents, checksum
 
 def test__get_raw_block_unchecked():
@@ -86,33 +86,33 @@ def test__get_raw_block_unchecked():
     assert _get_raw_block_unchecked(f) == (b"\x01" * 5, b"\x02" * 8)
     from nose.tools import assert_raises
     f_partial1 = BytesIO(b"\x05" + b"\x01" * 4)
-    assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial1)
+    assert_raises(ZSCorrupt, _get_raw_block_unchecked, f_partial1)
     f_partial2 = BytesIO(b"\x05" + b"\x01" * 5 + b"\x02" * 3)
-    assert_raises(ZSSCorrupt, _get_raw_block_unchecked, f_partial2)
+    assert_raises(ZSCorrupt, _get_raw_block_unchecked, f_partial2)
 
 def _check_block(offset, raw_block, checksum):
     if encoded_crc64xz(raw_block) != checksum:
-        raise ZSSCorrupt("checksum mismatch at %s" % (offset,))
+        raise ZSCorrupt("checksum mismatch at %s" % (offset,))
     block_level = indexbytes(raw_block, 0)
     zpayload = raw_block[1:]
     return (block_level, zpayload)
 
 # exception that can be raised by map_raw_block callback functions
-class _ZSSMapStop(Exception):
+class _ZSMapStop(Exception):
     pass
 
 # sentinel used for communication between _map_raw_helper and main process,
 # and also between _block_map_helper and main process.
-class _ZSS_MAP_SKIP(object):
+class _ZS_MAP_SKIP(object):
     pass
 
 def _map_raw_helper(offset, block_length, raw_block, checksum,
                     skip_index, start, stop, fn, args, kwargs):
     block_level, zpayload = _check_block(offset, raw_block, checksum)
     if block_level >= FIRST_EXTENSION_LEVEL:
-        return _ZSS_MAP_SKIP
+        return _ZS_MAP_SKIP
     if skip_index and block_level > 0:
-        return _ZSS_MAP_SKIP
+        return _ZS_MAP_SKIP
     return fn(offset, block_length, block_level, zpayload, start, stop,
               *args, **kwargs)
 
@@ -134,10 +134,10 @@ def _block_map_helper(offset, block_length, block_level, zpayload,
     payload = decompress_fn(zpayload)
     records = unpack_data_records(payload)
     if stop is not None and records[0] >= stop:
-        raise _ZSSMapStop()
+        raise _ZSMapStop()
     records = _trim_records(records, start, stop)
     if not records:
-        return _ZSS_MAP_SKIP
+        return _ZS_MAP_SKIP
     return user_fn(records, *user_args, **user_kwargs)
 
 def _dump_helper(records, terminator, length_prefixed):
@@ -154,7 +154,7 @@ def _validate_helper(offset, block_length, block_level, zpayload, start, stop,
     return (offset, block_length, block_level, decompress_fn(zpayload))
 
 # A simple LRU cache. This has a somewhat awkward API because we don't want it
-# to ever hold a reference to the ZSS object, because that would create a
+# to ever hold a reference to the ZS object, because that would create a
 # reference loop. And in particular, this means that it can't hold a reference
 # to the bound method that's being cached, so we have to pass that in on every
 # use.
@@ -199,17 +199,17 @@ def test_LRU():
     assert cache.lru_call(f, 2) == 4
     assert calls == [2, 3, 4, 5, 4, 2]
 
-class ZSS(object):
-    """Object representing a .zss file opened for reading.
+class ZS(object):
+    """Object representing a .zs file opened for reading.
 
     :arg path: A string containing an on-disk file to be opened. Exactly one
       of ``path`` or ``url`` must be specified.
 
-    :arg url: An HTTP (or HTTPS) URL pointing to a .zss file, which will be
+    :arg url: An HTTP (or HTTPS) URL pointing to a .zs file, which will be
       accessed directly from the server. The server must support Range:
       queries. Exactly one of ``path`` or ``url`` must be specified.
 
-    :arg parallelism: When querying a ZSS file, there are always at least 2
+    :arg parallelism: When querying a ZS file, there are always at least 2
       threads working in parallel: the main thread, where you iterate over the
       results and presumably do something with them, and a second thread used
       for IO. In addition, we can spawn any number of worker processes which
@@ -223,12 +223,12 @@ class ZSS(object):
     :arg index_block_cache: The number of index blocks to keep cached in
       memory. This speeds up repeated queries. Larger values provide better
       caching, but take more memory. Usually you'll want this to at least be
-      as large as the depth of your .zss file's index tree, to ensure that the
+      as large as the depth of your .zs file's index tree, to ensure that the
       root block stays cached.
 
     This object can be used as a context manager, e.g.::
 
-        with ZSS("./my/favorite.zss") as z:
+        with ZS("./my/favorite.zs") as z:
             ...
     """
     def __init__(self, path=None, url=None,
@@ -246,7 +246,7 @@ class ZSS(object):
         self.root_index_length = header["root_index_length"]
         codec = header["codec"]
         if codec not in codecs:
-            raise ZSSCorrupt("unrecognized compression codec %r"
+            raise ZSCorrupt("unrecognized compression codec %r"
                              % (codec,))
         self._decompress = codecs[codec][-1]
         self.total_file_length = header["total_file_length"]
@@ -254,14 +254,14 @@ class ZSS(object):
         # miss returning data that should have been returned.
         actual_length = self._transport.length()
         if actual_length != self.total_file_length:
-            raise ZSSCorrupt("file is %s bytes, but header says it should "
+            raise ZSCorrupt("file is %s bytes, but header says it should "
                              "be %s"
                              % (actual_length, self.total_file_length))
         self.codec = codec
         self.data_sha256 = header["sha256"]
         self.metadata = header["metadata"]
         if not isinstance(self.metadata, dict):
-            raise ZSSCorrupt("bad metadata")
+            raise ZSCorrupt("bad metadata")
 
         if parallelism == "auto":
             # XX put an upper bound on this
@@ -281,7 +281,7 @@ class ZSS(object):
 
     def _check_closed(self):
         if self._closed:
-            raise ZSSError("attemped operation on closed ZSS file")
+            raise ZSError("attemped operation on closed ZS file")
 
     def _get_header(self):
         chunk = self._transport.chunk_read(0, HEADER_SIZE_GUESS)
@@ -289,11 +289,11 @@ class ZSS(object):
 
         magic = read_n(stream, len(MAGIC))
         if magic == INCOMPLETE_MAGIC:
-            raise ZSSCorrupt("%s: looks like this ZSS file was only "
+            raise ZSCorrupt("%s: looks like this ZS file was only "
                              "partially written" % (self._transport.name,))
         if magic != MAGIC:
-            raise ZSSCorrupt("%s: bad magic number (are you sure this is "
-                             "a ZSS file?)" % (self._transport.name))
+            raise ZSCorrupt("%s: bad magic number (are you sure this is "
+                             "a ZS file?)" % (self._transport.name))
         header_data_length, = read_format(stream, header_data_length_format)
 
         needed = header_data_length + CRC_LENGTH
@@ -306,7 +306,7 @@ class ZSS(object):
         header_encoded = read_n(stream, header_data_length)
         header_crc = read_n(stream, CRC_LENGTH)
         if encoded_crc64xz(header_encoded) != header_crc:
-            raise ZSSCorrupt("%s: header checksum mismatch"
+            raise ZSCorrupt("%s: header checksum mismatch"
                              % (self._transport.name,))
 
         return _decode_header_data(header_encoded), header_end
@@ -315,12 +315,12 @@ class ZSS(object):
     def root_index_level(self):
         """The level of the root index.
 
-        Starting from scratch, finding an arbitrary record in a ZSS file
+        Starting from scratch, finding an arbitrary record in a ZS file
         requires that we fetch the header, fetch the root block, and then
         fetch this many blocks to traverse the index tree. So that's a total
         of ``root_index_level + 2`` fetches. (On local disk, each "fetch" is a
         disk seek; over HTTP, each "fetch" is a round-trip to the server.) For
-        later queries on the same :class:`ZSS` object, at least the header and
+        later queries on the same :class:`ZS` object, at least the header and
         root will be cached, and (if you're lucky) other blocks may be as
         well.
 
@@ -336,16 +336,16 @@ class ZSS(object):
     def _get_index_block_impl(self, offset, block_length):
         chunk = self._transport.chunk_read(offset, block_length)
         if len(chunk) != block_length:
-            raise ZSSCorrupt("partial read on index block @ %s, length %s"
+            raise ZSCorrupt("partial read on index block @ %s, length %s"
                              % (offset, block_length))
         raw_block, checksum = _get_raw_block_unchecked(BytesIO(chunk))
         block_level, zpayload = _check_block(offset, raw_block, checksum)
         if block_level == 0:
-            raise ZSSCorrupt("%s:%s: "
+            raise ZSCorrupt("%s:%s: "
                              "expecting index block but found data block"
                              % (self._transport.name, offset))
         if block_level >= FIRST_EXTENSION_LEVEL:
-            raise ZSSCorrupt("%s:%s: "
+            raise ZSCorrupt("%s:%s: "
                              "expecting index block but found "
                              "level %s extension block"
                              % (self._transport.name, offset, block_level))
@@ -438,11 +438,11 @@ class ZSS(object):
     #   process. There is one readahead thread for each active map_raw
     #   generator.
     # - The pool of worker processes, which is shared by all iterators over a
-    #   single ZSS object. These are accessed via the concurrent.futures API,
+    #   single ZS object. These are accessed via the concurrent.futures API,
     #   so we don't deal with them directly, we just dispatch work and get
     #   back results. If parallelism == 0, this might not even exist -- but
     #   this is invisible to map_raw.. (FIXME: maybe there should just be a
-    #   single global worker pool shared by all ZSS objects?  This would
+    #   single global worker pool shared by all ZS objects?  This would
     #   require a global parallelism setting, of course. And the
     #   start/shutdown/change lifespan becomes complicated...)
     #
@@ -468,9 +468,9 @@ class ZSS(object):
     #   that the workers are kept busy, but not too busy.
     #
     # The readahead thread is responsible for:
-    # - performing IO on the actual ZSS file (this ensures that it is done in
+    # - performing IO on the actual ZS file (this ensures that it is done in
     #   a serial manner, but without blocking the main thread).
-    # - taking the bytes read from the ZSS file, and dispatching them to
+    # - taking the bytes read from the ZS file, and dispatching them to
     #   workers to unpack and process.
     # - sending the work handles ('futures') back to the main thread. Again,
     #   this is done serially, ensuring that the main thread will get results
@@ -482,13 +482,13 @@ class ZSS(object):
     # the time .close() completes, the IO stream will be closed, and that no
     # more work will be enqueued.
     #
-    # In addition, the ZSS object keeps weak references to all active map_raw
-    # generators, and when a ZSS object is closed it explicitly closes all
+    # In addition, the ZS object keeps weak references to all active map_raw
+    # generators, and when a ZS object is closed it explicitly closes all
     # generators. Once they are closed, we know that the threads are all dead,
     # so it is safe to shut down the worker processes etc.
     #
     # Each map_raw generator and readahead thread keeps a strong reference to
-    # the ZSS object, so the ZSS object cannot be garbage-collected while any
+    # the ZS object, so the ZS object cannot be garbage-collected while any
     # map_raw iterations are active.
 
     # Sentinels used for communication between the readahead thread and the
@@ -567,13 +567,13 @@ class ZSS(object):
           >= 64).
 
         * These calls are performed in parallel in however many worker
-          processes were configured when this ZSS object was created;
+          processes were configured when this ZS object was created;
           therefore, fn, args, and kwargs must all be pickleable (unless you
           use parallelism=0).
 
         * The iteration may or may not stop when the 'stop' key is reached. If
           you want it to stop for sure at any point, you must either (a) raise
-          a _ZSSMapStop from your callback function, or (b) call .close() on
+          a _ZSMapStop from your callback function, or (b) call .close() on
           this generator.
         """
         gen = self._map_raw_block_gen(*args, **kwargs)
@@ -598,9 +598,9 @@ class ZSS(object):
                 if future is self._MAP_EOF:
                     return
                 value = future.result()
-                if value is not _ZSS_MAP_SKIP:
+                if value is not _ZS_MAP_SKIP:
                     yield value
-        except _ZSSMapStop:
+        except _ZSMapStop:
             # Some job requested early termination of the loop
             return
         finally:
@@ -629,7 +629,7 @@ class ZSS(object):
         like :func:`range`.
 
         If no arguments are given, iterates over the entire contents of the
-        .zss file.
+        .zs file.
 
         Records are always returned in sorted order.
         """
@@ -655,12 +655,12 @@ class ZSS(object):
         given query. This function is lazy -- you have to iterate
 
         Using this method (or its friend, :meth:`block_exec`) is the
-        best way to perform large bulk operations on ZSS files.
+        best way to perform large bulk operations on ZS files.
 
         The way to think about this is, first we find all records matching the
         given query::
 
-            matches = zss_obj.search(start=start, stop=stop, prefix=prefix)
+            matches = zs_obj.search(start=start, stop=stop, prefix=prefix)
 
         and then we divide the resulting list of records up into arbitrarily
         sized chunks, and for each chunk we call the given function, and yield
@@ -694,7 +694,7 @@ class ZSS(object):
         database or something), then you can use :meth:`block_exec` instead to
         save a bit of boilerplate.
 
-        If you pass ``parallelism=0`` when creating your :class:`ZSS` object,
+        If you pass ``parallelism=0`` when creating your :class:`ZS` object,
         then this method will perform all work within the main process. This
         makes debugging a lot easier, because it will let you get real
         backtraces if (when) your ``fn`` crashes.
@@ -706,7 +706,7 @@ class ZSS(object):
         with closing(mrb(start, stop, True, _block_map_helper,
                          self._decompress, fn, args, kwargs)) as it:
             for result in it:
-                if result is not _ZSS_MAP_SKIP:
+                if result is not _ZS_MAP_SKIP:
                     yield result
 
     def block_exec(self, fn, start=None, stop=None, prefix=None,
@@ -724,13 +724,13 @@ class ZSS(object):
                 pass
 
     def __iter__(self):
-        """Equivalent to ``zss_obj.search()``."""
+        """Equivalent to ``zs_obj.search()``."""
         self._check_closed()
         return self.search()
 
     def dump(self, out_file, start=None, stop=None, prefix=None,
              terminator=b"\n", length_prefixed=None):
-        """Decompress a given range of the .zss file to another file. This is
+        """Decompress a given range of the .zs file to another file. This is
         performed in the most efficient available way.
 
         :arg terminator: A terminator appended to the end of each
@@ -747,7 +747,7 @@ class ZSS(object):
 
         On Python 3, ``out_file`` must be opened in binary mode.
 
-        For a convenient command-line interface to this method, see :ref:`zss
+        For a convenient command-line interface to this method, see :ref:`zs
         dump`.
 
         """
@@ -759,16 +759,16 @@ class ZSS(object):
             out_file.writelines(it)
 
     def validate(self):
-        """Validate this .zss file for correctness.
+        """Validate this .zs file for correctness.
 
         This method does an exhaustive check of the current file, to validate
-        it for self-consistency and compliance with the ZSS specification. It
+        it for self-consistency and compliance with the ZS specification. It
         should catch all cases of disk corruption (with high probability), and
         all cases of incorrectly constructed files.
 
         This reads and decompresses the entire file, so may take some time.
 
-        For a convenient command-line interface to this method, see :ref:`zss
+        For a convenient command-line interface to this method, see :ref:`zs
         validate`.
 
         """
@@ -872,7 +872,7 @@ class ZSS(object):
         if failures:
             failure_strs = ["offset %s: %s" % (offset, msg)
                             for (offset, msg) in failures]
-            raise ZSSCorrupt("Integrity check failed:\n  "
+            raise ZSCorrupt("Integrity check failed:\n  "
                              + "\n  ".join(failure_strs))
         else:
             return "PASS"

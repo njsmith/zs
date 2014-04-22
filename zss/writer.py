@@ -1,4 +1,4 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -17,7 +17,7 @@ from datetime import datetime
 
 import six
 
-from zss.common import (ZSSError,
+from zs.common import (ZSError,
                         MAGIC,
                         INCOMPLETE_MAGIC,
                         FIRST_EXTENSION_LEVEL,
@@ -28,7 +28,7 @@ from zss.common import (ZSSError,
                         codecs,
                         read_format,
                         read_length_prefixed)
-from zss._zss import (pack_data_records, pack_index_records,
+from zs._zs import (pack_data_records, pack_index_records,
                       unpack_data_records,
                       write_uleb128)
 
@@ -95,7 +95,7 @@ def box_exception():
 def reraise_boxed(box):
     e_type, e_obj, extracted_tb = box
     orig_tb_str = "".join(traceback.format_list(extracted_tb))
-    raise ZSSError("Error in worker: %s\n\n"
+    raise ZSError("Error in worker: %s\n\n"
                    "(Original traceback:\n"
                    "    %s"
                    "    %s: %s\n"
@@ -108,7 +108,7 @@ def reraise_boxed(box):
                   )
 
 # We have a very strict policy on exceptions: any exception anywhere in
-# ZSSWriter is non-recoverable.
+# ZSWriter is non-recoverable.
 
 # This context manager is wrapped around all out-of-process code, to ship
 # errors back to the main process.
@@ -132,19 +132,19 @@ def errors_close(obj):
         obj.close()
         raise
 
-class ZSSWriter(object):
+class ZSWriter(object):
     def __init__(self, path, metadata, branching_factor,
                  parallelism="auto", codec="bz2", codec_kwargs={},
                  show_spinner=True, include_default_metadata=True):
-        """Create a ZSSWriter object.
+        """Create a ZSWriter object.
 
         .. note:: In many cases it'll be easier to just use the command line
-          'zss make' tool, which is a wrapper around this class.
+          'zs make' tool, which is a wrapper around this class.
 
         :arg path: File to write to. Must not already exist.
 
         :arg metadata: Dict or dict-like containing arbitrary metadata for the
-          .zss file. See :ref:`metadata-conventions`.
+          .zs file. See :ref:`metadata-conventions`.
 
         :arg branching_factor: The number of entries to put into each *index*
           block. We use a simple greedy packing strategy, where we fill up
@@ -163,17 +163,17 @@ class ZSSWriter(object):
         :arg include_default_metadata: Whether to auto-add some default
           metadata (time, host, user).
 
-        Once you have a ZSSWriter object, you can use the
+        Once you have a ZSWriter object, you can use the
         :meth:`add_data_block` and :meth:`add_file_contents` methods to write
         data to it. It is your job to ensure that all records are added in
         (ASCIIbetical/memcmp) sorted order.
 
         Once you are done adding records, you must call :meth:`close`. This
         will not be done automatically. (This is a feature, to make sure that
-        errors that cause early termination leave obviously-invalid ZSS files
+        errors that cause early termination leave obviously-invalid ZS files
         behind.)
 
-        The most optimized way to build a ZSS file is to use
+        The most optimized way to build a ZS file is to use
         :meth:`add_file_contents` with terminated (not length-prefixed)
         records. However, this is only possible if your records have some
         fixed terminator that you can be sure never occurs within a record
@@ -182,7 +182,7 @@ class ZSSWriter(object):
         """
 
         self._path = path
-        # The testsuite writes lots of ZSS files to temporary storage, so
+        # The testsuite writes lots of ZS files to temporary storage, so
         # better take the trouble to use O_EXCL to prevent exposing everyone
         # who runs the test suite to security holes...
         open_flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
@@ -193,7 +193,7 @@ class ZSSWriter(object):
         try:
             fd = os.open(path, open_flags, 0o666)
         except OSError as e:
-            raise ZSSError("%s: %s" % (path, e))
+            raise ZSError("%s: %s" % (path, e))
         self._file = os.fdopen(fd, "w+b")
         self.metadata = dict(metadata)
         if include_default_metadata:
@@ -210,7 +210,7 @@ class ZSSWriter(object):
         self._parallelism = parallelism
         self.codec = codec
         if self.codec not in codecs:
-            raise ZSSError("unknown codec %r (should be one of: %s)"
+            raise ZSError("unknown codec %r (should be one of: %s)"
                            % (codec, ", ".join(codecs)))
         self._compress_fn = codecs[self.codec][0]
         self._codec_kwargs = codec_kwargs
@@ -263,7 +263,7 @@ class ZSSWriter(object):
 
     def _check_open(self):
         if self.closed:
-            raise ZSSError("attempted operation on closed ZSSWriter")
+            raise ZSError("attempted operation on closed ZSWriter")
 
     def _check_error(self):
         try:
@@ -292,7 +292,7 @@ class ZSSWriter(object):
             process.join(ERROR_CHECK_FREQ)
 
     def add_data_block(self, records):
-        """Append the given set of records to the ZSS file as a single data
+        """Append the given set of records to the ZS file as a single data
         block.
 
         (See :ref:`format` for details on what a data block is.)
@@ -312,7 +312,7 @@ class ZSSWriter(object):
     def add_file_contents(self, file_handle, approx_block_size,
                           terminator=b"\n", length_prefixed=None):
         """Split the contents of file_handle into records, and write them to
-        the ZSS file.
+        the ZS file.
 
         The arguments determine how the contents of the file are divided into
         records and blocks.
@@ -359,7 +359,7 @@ class ZSSWriter(object):
                 # File should have ended with a newline (and we don't write
                 # out the trailing empty record that this might imply).
                 if partial_record:
-                    raise ZSSError("file did not end with terminator")
+                    raise ZSError("file did not end with terminator")
                 break
             buf = partial_record + buf
             try:
@@ -394,7 +394,7 @@ class ZSSWriter(object):
         This method writes out the root block, updates the header, etc.
 
         Importantly, we do not write out the correct magic number until this
-        method completes, so no ZSS reader will be willing to read your file
+        method completes, so no ZS reader will be willing to read your file
         until this is called (see :ref:`magic-numbers`).
 
         Do not call this method unless you are sure you have added the right
@@ -410,7 +410,7 @@ class ZSSWriter(object):
             # Stop all the processing queues and wait for them to finish.
             # if self._show_spinner:
             #     sys.stdout.write("\n")
-            # sys.stdout.write("zss: Finished reading input; waiting for "
+            # sys.stdout.write("zs: Finished reading input; waiting for "
             #                  "write thread to catch up\n")
             for i in range(self._parallelism):
                 self._safe_put(self._compress_queue, _QUIT)
@@ -424,9 +424,9 @@ class ZSSWriter(object):
         # The writer and compressors have all exited, so any errors they've
         # encountered have definitely been enqueued.
         self._check_error()
-        sys.stdout.write("zss: Updating header...\n")
+        sys.stdout.write("zs: Updating header...\n")
         root_index_offset, root_index_length, sha256 = self._finish_queue.get()
-        #sys.stdout.write("zss: Root index offset: %s\n" % (root_index_offset,))
+        #sys.stdout.write("zs: Root index offset: %s\n" % (root_index_offset,))
         # Now we have the root offset
         self._header["root_index_offset"] = root_index_offset
         self._header["root_index_length"] = root_index_length
@@ -439,7 +439,7 @@ class ZSSWriter(object):
         # Read the header length and make sure it hasn't changed
         old_length, = read_format(self._file, header_data_length_format)
         if old_length != len(new_encoded_header):
-            raise ZSSError("header data length changed")
+            raise ZSError("header data length changed")
         self._file.write(new_encoded_header)
         self._file.write(encoded_crc64xz(new_encoded_header))
         # Flush the file to disk to make sure that all data is consistent
@@ -455,10 +455,10 @@ class ZSSWriter(object):
     def close(self):
         """Close the file and terminate all background processing.
 
-        Further operations on this ZSSWriter object will raise an error.
+        Further operations on this ZSWriter object will raise an error.
 
         If you call this method before calling :meth:`finish`, then you will
-        not have a working ZSS file.
+        not have a working ZS file.
 
         This object can be used as a context manager in a ``with`` block, in
         which case :meth:`close` will be called automatically, but
@@ -515,7 +515,7 @@ def _write_worker(path, branching_factor,
                   compress_fn, codec_kwargs,
                   write_queue, finish_queue,
                   show_spinner, error_queue):
-    data_appender = _ZSSDataAppender(path, branching_factor,
+    data_appender = _ZSDataAppender(path, branching_factor,
                                      compress_fn, codec_kwargs)
     pending_jobs = {}
     wanted_job = 0
@@ -525,7 +525,7 @@ def _write_worker(path, branching_factor,
         if show_spinner and (done or wanted_job % 100 == 0):
             if wanted_job > 0:
                 sys.stdout.write("\r")
-            sys.stdout.write("zss: Data blocks written: %s" % (wanted_job,))
+            sys.stdout.write("zs: Data blocks written: %s" % (wanted_job,))
             if done:
                 sys.stdout.write("\n")
             sys.stdout.flush()
@@ -551,7 +551,7 @@ def _write_worker(path, branching_factor,
 # handles generating the index. The hope is that indexing has low enough
 # overhead that handling it in serial with the actual writes won't create a
 # bottleneck...
-class _ZSSDataAppender(object):
+class _ZSDataAppender(object):
     def __init__(self, path, branching_factor, compress_fn, codec_kwargs):
         self._file = open(path, "ab")
         # Opening in append mode should put us at the end of the file, but
@@ -573,7 +573,7 @@ class _ZSSDataAppender(object):
 
     def write_block(self, level, first_record, last_record, payload, zpayload):
         if not (0 <= level < FIRST_EXTENSION_LEVEL):
-            raise ZSSError("invalid level %s" % (level,))
+            raise ZSError("invalid level %s" % (level,))
 
         if level == 0:
             self._hasher.update(payload)
@@ -636,7 +636,7 @@ class _ZSSDataAppender(object):
             return True
 
         if not self._level_entries:
-            raise ZSSError("cannot create empty ZSS file")
+            raise ZSError("cannot create empty ZS file")
 
         while not have_root():
             for level in range(FIRST_EXTENSION_LEVEL):

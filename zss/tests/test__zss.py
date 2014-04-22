@@ -1,4 +1,4 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -6,8 +6,8 @@ from __future__ import absolute_import
 
 import six
 
-import zss
-from .._zss import *
+import zs
+from .._zs import *
 from nose.tools import assert_raises
 
 def test_crc64xz():
@@ -53,15 +53,15 @@ def test_data_records():
     assert pack_data_records(records) == expected
     assert unpack_data_records(expected) == records
     # Second record extends past end of block
-    assert_raises(zss.ZSSCorrupt,
+    assert_raises(zs.ZSCorrupt,
                   unpack_data_records, b"\x03aaa\x04aaa")
     # Second uleb128 extends past end of block
-    assert_raises(zss.ZSSCorrupt,
+    assert_raises(zs.ZSCorrupt,
                   unpack_data_records, b"\x03aaa\x80")
     # incorrectly sorted records
-    assert_raises(zss.ZSSError,
+    assert_raises(zs.ZSError,
                   pack_data_records, [b"z", b"a"], 100)
-    assert_raises(zss.ZSSError,
+    assert_raises(zs.ZSError,
                   pack_data_records, [b"a\x00", b"a"], 100)
 
 def test_index_records():
@@ -80,25 +80,25 @@ def test_index_records():
     assert unpack_index_records(expected) == (records, offsets, block_lengths)
     # Second record extends past end of block
     print("a")
-    assert_raises(zss.ZSSCorrupt,
+    assert_raises(zs.ZSCorrupt,
                   unpack_index_records, b"\x03aaa\x00\x01\x04aaa")
     # Second uleb128 record length extends past end of block
     print("b")
-    assert_raises(zss.ZSSCorrupt,
+    assert_raises(zs.ZSCorrupt,
                   unpack_index_records, b"\x03aaa\x00\x00\x80")
     # Second uleb128 offset extends past end of block
     print("c")
-    assert_raises(zss.ZSSCorrupt,
+    assert_raises(zs.ZSCorrupt,
                   unpack_index_records, b"\x03aaa\x00\x00\x01a\x80")
     # Second uleb128 block_length extends past end of block
     print("d")
-    assert_raises(zss.ZSSCorrupt,
+    assert_raises(zs.ZSCorrupt,
                   unpack_index_records, b"\x03aaa\x00\x00\x01a\x01\x80")
     # incorrectly sorted records
-    assert_raises(zss.ZSSError,
+    assert_raises(zs.ZSError,
                   pack_index_records, [b"z", b"a"], [1, 2], [10, 10], 100)
-    assert_raises(zss.ZSSError,
+    assert_raises(zs.ZSError,
                   pack_index_records, [b"a\x00", b"a"], [1, 2], [10, 10], 100)
     # incorrectly sorted offsets
-    assert_raises(zss.ZSSError,
+    assert_raises(zs.ZSError,
                   pack_index_records, [b"a", b"z"], [2, 1], [10, 10], 100)

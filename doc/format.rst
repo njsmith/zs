@@ -1,9 +1,9 @@
 .. _format:
 
-On-disk layout of ZSS files
+On-disk layout of ZS files
 ===========================
 
-This page provides a complete specification of the ZSS file format,
+This page provides a complete specification of the ZS file format,
 along with rationale for specific design choices. It should be read by
 anyone who plans to implement a new reader or writer for the
 format, or is just interested in how things work under the covers.
@@ -11,7 +11,7 @@ format, or is just interested in how things work under the covers.
 Overview and general notes
 --------------------------
 
-ZSS is a read-only database format designed to store a `multiset
+ZS is a read-only database format designed to store a `multiset
 <https://en.wikipedia.org/wiki/Multiset>`_ of records, where each
 record is an uninterpreted string of binary data. The main design
 goals are:
@@ -20,7 +20,7 @@ goals are:
   fast.
 * Doing a streaming read of a large span of records should be fast.
 * Hardware is unreliable, especially on the scale of terabytes and
-  years, and ZSS is designed for long-term archival of multi-terabyte
+  years, and ZS is designed for long-term archival of multi-terabyte
   data. Therefore it must be possible to quickly and reliably validate
   the integrity of the data returned by every operation.
 * It should be reasonably efficient to access files over slow, "dumb"
@@ -28,7 +28,7 @@ goals are:
 * Files should be as small as possible while achieving the above
   goals.
 
-The main complication influencing ZSS's design is that compression is
+The main complication influencing ZS's design is that compression is
 necessary to achieve reasonable storage sizes, but decompression is
 slow, block-oriented, and inherently serial, which puts the last goal
 in direct conflict with the first two. Compressing a chunk of data is
@@ -56,7 +56,7 @@ Our solution is to bundle records together into moderately-sized
 blocks, and then compress each block. Then we add some framing to let
 us figure out where each block starts and ends, and add an index
 structure to let us quickly find which blocks contain records that
-match some query, and ta-da, we have a ZSS file. The resulting
+match some query, and ta-da, we have a ZS file. The resulting
 structure looks like this:
 
 .. image:: /figures/format-overview.*
@@ -137,7 +137,7 @@ below.
 .. image:: /figures/format-details.*
    :width: 100%
 
-ZSS files consist of a *magic number*, followed by a *header*, followed by
+ZS files consist of a *magic number*, followed by a *header*, followed by
 a sequence of *blocks*. Blocks come in two types: *data blocks*, and
 *index blocks*.
 
@@ -146,52 +146,52 @@ a sequence of *blocks*. Blocks come in two types: *data blocks*, and
 Magic number
 ''''''''''''
 
-To make it easy to distinguish ZSS files from non-ZSS files, every
-valid ZSS file begins with 8 `magic bytes
+To make it easy to distinguish ZS files from non-ZS files, every
+valid ZS file begins with 8 `magic bytes
 <https://en.wikipedia.org/wiki/File_format#Magic_number>`_. Specifically,
 these ones (written in hex)::
 
   5a 53 53 1c 8e 6c 00 01    # Good magic
 
-This is the ascii string ``ZSS``, followed by 3 random bytes,
+This is the ascii string ``ZS``, followed by 3 random bytes,
 followed by two bytes which might be used as a version identifier in
-case there is ever a ZSS version 2.
+case there is ever a ZS version 2.
 
-Writing out a large ZSS file is a somewhat involved operation that
+Writing out a large ZS file is a somewhat involved operation that
 might take a long time. It's possible for a hardware or software
 problem to occur and cause this process to be aborted before the file
-is completely written, leaving behind a partial, corrupt ZSS
-file. Because ZSS is designed as a reliable archival format we would
+is completely written, leaving behind a partial, corrupt ZS
+file. Because ZS is designed as a reliable archival format we would
 like to avoid the possibility of confusing a corrupt file with a
-correct one, and because writing ZSS files can be slow, after a crash
+correct one, and because writing ZS files can be slow, after a crash
 we would like to be able to reliably determine whether the writing
 operation had completed, to know whether we can trust the file left
 behind. Therefore we also define a second magic number to be used
-specifically for partial ZSS files::
+specifically for partial ZS files::
 
   53 53 5a 1c 8e 6c 00 01    # Bad magic
 
 This is the same as the regular magic value, except that the string
-``ZSS`` has been replaced by ``SSZ``.
+``ZS`` has been replaced by ``SSZ``.
 
-It is strongly recommended that ZSS file writers perform the following
+It is strongly recommended that ZS file writers perform the following
 sequence:
 
 * Write out the ``SSZ`` magic number.
-* Write out the rest of the ZSS file.
+* Write out the rest of the ZS file.
 * Update the header to its final form (including, e.g., the offset of
   the root block).
 * (IMPORTANT) Sync the file to disk using ``fsync()`` or equivalent.
-* Replace the ``SSZ`` magic number with the correct ``ZSS`` magic
+* Replace the ``SSZ`` magic number with the correct ``ZS`` magic
   number.
 
 Following this procedure guarantees that, modulo disk corruption, any
-file which begins with the correct ZSS magic will in fact be a
-complete, valid ZSS file.
+file which begins with the correct ZS magic will in fact be a
+complete, valid ZS file.
 
-Any file which does not begin with the correct ZSS magic is not a
-valid ZSS file, and should be rejected by ZSS file readers. Files with
-the ``SSZ`` magic are not valid ZSS files. However, polite ZSS readers
+Any file which does not begin with the correct ZS magic is not a
+valid ZS file, and should be rejected by ZS file readers. Files with
+the ``SSZ`` magic are not valid ZS files. However, polite ZS readers
 should generally check for the ``SSZ`` magic, and if encountered,
 provide a more informative error message while rejecting the file.
 
@@ -214,11 +214,11 @@ The header contains the following fields, in order:
   block. This *includes* the root index block's length and CRC fields;
   the idea is that doing a single read of this length, at the given
   offset, will give us the root index itself. This is an important
-  optimization when IO has high-latency, as when accessing a ZSS file
+  optimization when IO has high-latency, as when accessing a ZS file
   over HTTP.
 
 * Total file length (``u64le``): The total number of bytes contained
-  in this ZSS file; the same thing you'd get from ``ls -l`` or
+  in this ZS file; the same thing you'd get from ``ls -l`` or
   similar.
 
    .. warning:: To guarantee data integrity, it is important for
@@ -229,7 +229,7 @@ The header contains the following fields, in order:
 * SHA-256 of data (32 bytes): The SHA-256 hash of the stream one would
   get by extracting all data block payloads and concatenating
   them. The idea is that this value uniquely identifies the logical
-  contents of a ZSS file, regardless of storage details like
+  contents of a ZS file, regardless of storage details like
   compression mode, block size, index fanout, etc.
 
 * Codec (16 bytes): A null-padded string specifying the codec
@@ -241,7 +241,7 @@ The header contains the following fields, in order:
     defined in `RFC 1951 <https://tools.ietf.org/html/rfc1951>`_. Note
     that this is different from both the gzip format (RFC 1952) and
     the zlib format (RFC 1950), which use different framing and
-    checksums. ZSS provides its own framing and checksum, so we just
+    checksums. ZS provides its own framing and checksum, so we just
     use raw deflate streams.
 
   * ``bz2``: Block payloads are compressed using `the bzip2 format
@@ -254,7 +254,7 @@ The header contains the following fields, in order:
 * Metadata length (``u64le``): The length of the next field:
 
 * Metadata (UTF-8 encoded JSON): This field allows arbitrary metadata
-  to be attached to a ZSS file. The only restriction is that the
+  to be attached to a ZS file. The only restriction is that the
   encoded value must be what JSON calls an "object" (also known as a
   dict, hash table, etc. -- basically, the outermost characters have
   to be ``{}``). But this object can contain arbitrarily complex
@@ -264,7 +264,7 @@ The header contains the following fields, in order:
 * <extensions> (??): Compliant readers should ignore any data
   occurring between the end of the metadata field and the end of the
   header (as defined by the header length field). This space may be
-  used in the future to add backwards-compatible extensions to the ZSS
+  used in the future to add backwards-compatible extensions to the ZS
   format. (Backwards-incompatible extensions, of course, will include
   a change to the magic number.)
 
@@ -340,7 +340,7 @@ Each index payload entry has the form:
   *includes* the root index block's length and CRC fields; the idea is
   that doing a single read of this length, a the given offset, will
   give us the root index itself. This is an important optimization
-  when IO has high-latency, as when accessing a ZSS file over HTTP.
+  when IO has high-latency, as when accessing a ZS file over HTTP.
 
 Then this is repeated as many times as you want.
 
@@ -381,7 +381,7 @@ We require:
      key. But we do not guarantee this; advanced implementations might
      take advantage of this flexibility to choose shorter keys that are
      just long enough to satisfy the invariant above. (In particular,
-     there's nothing in ZSS stopping you from having large individual
+     there's nothing in ZS stopping you from having large individual
      records, up into the megabyte range and beyond, and in this case
      you might well prefer not to copy the whole record into the index
      block.)

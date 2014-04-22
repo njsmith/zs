@@ -1,4 +1,4 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -12,11 +12,11 @@ from nose.tools import assert_raises
 
 from .util import test_data_path
 from .http_harness import web_server
-from zss import ZSS, ZSSError, ZSSCorrupt
-from zss._zss import pack_data_records
-from zss.common import read_length_prefixed, codecs
+from zs import ZS, ZSError, ZSCorrupt
+from zs._zs import pack_data_records
+from zs.common import read_length_prefixed, codecs
 
-# letters.zss contains records:
+# letters.zs contains records:
 #   [b, bb, d, dd, f, ff, ..., z, zz]
 letters_records = []
 for i in range(1, 26, 2):
@@ -36,7 +36,7 @@ def _check_map_helper(records, arg1, arg2):
 def _check_raise_helper(records, exc):
     raise exc
 
-def check_letters_zss(z, codec):
+def check_letters_zs(z, codec):
     assert isinstance(z.root_index_offset, integer_types)
     assert isinstance(z.root_index_length, integer_types)
     assert isinstance(z.total_file_length, integer_types)
@@ -55,7 +55,7 @@ def check_letters_zss(z, codec):
     assert list(z) == letters_records
     assert list(z.search()) == letters_records
 
-    if "ZSS_QUICK_TEST" in os.environ:
+    if "ZS_QUICK_TEST" in os.environ:
         chars = "m"
     else:
         chars = "abcdefghijklmnopqrstuvwxyz"
@@ -118,38 +118,38 @@ def check_letters_zss(z, codec):
 
     z.validate()
 
-def test_zss():
+def test_zs():
     for codec in codecs:
-        p = test_data_path("letters-%s.zss" % (codec,))
+        p = test_data_path("letters-%s.zs" % (codec,))
         for parallelism in [0, 2, "auto"]:
-            with ZSS(path=p, parallelism=parallelism) as z:
-                check_letters_zss(z, codec)
+            with ZS(path=p, parallelism=parallelism) as z:
+                check_letters_zs(z, codec)
 
 # This is much slower, and the above test will have already exercised most of
 # the tricky code, so we make this test less exhaustive.
-def test_http_zss():
+def test_http_zs():
     with web_server(test_data_path()) as root_url:
         codec = "bz2"
-        url = "%s/letters-%s.zss" % (root_url, codec)
+        url = "%s/letters-%s.zs" % (root_url, codec)
         for parallelism in [0, 2]:
-            with ZSS(url=url, parallelism=parallelism) as z:
-                check_letters_zss(z, codec)
+            with ZS(url=url, parallelism=parallelism) as z:
+                check_letters_zs(z, codec)
 
 def test_http_notices_lack_of_range_support():
     with web_server(test_data_path(), range_support=False) as root_url:
         codec = "bz2"
-        url = "%s/letters-%s.zss" % (root_url, codec)
-        assert_raises(ZSSError, lambda: list(ZSS(url=url)))
+        url = "%s/letters-%s.zs" % (root_url, codec)
+        assert_raises(ZSError, lambda: list(ZS(url=url)))
 
-def test_zss_args():
-    p = test_data_path("letters-none.zss")
+def test_zs_args():
+    p = test_data_path("letters-none.zs")
     # can't pass both path and url
-    assert_raises(ValueError, ZSS, path=p, url="x")
+    assert_raises(ValueError, ZS, path=p, url="x")
     # parallelism must be >= 0
-    assert_raises(ValueError, ZSS, path=p, parallelism=-1)
+    assert_raises(ValueError, ZS, path=p, parallelism=-1)
 
-def test_zss_close():
-    z = ZSS(test_data_path("letters-none.zss"))
+def test_zs_close():
+    z = ZS(test_data_path("letters-none.zs"))
     z.close()
     for call in [[list, z.search()],
                  [list,
@@ -159,24 +159,24 @@ def test_zss_close():
                  [z.validate],
                  ]:
         print(repr(call))
-        assert_raises(ZSSError, *call)
+        assert_raises(ZSError, *call)
     # But calling .close() twice is fine.
     z.close()
 
     # smoke test for __del__ method
-    ZSS(test_data_path("letters-none.zss"))
+    ZS(test_data_path("letters-none.zs"))
 
 def test_context_manager_closes():
-    with ZSS(test_data_path("letters-none.zss")) as z:
+    with ZS(test_data_path("letters-none.zs")) as z:
         assert list(z.search()) == letters_records
-    assert_raises(ZSSError, list, z.search())
+    assert_raises(ZSError, list, z.search())
 
 def test_block_exec():
     # This function tricky to test in a multiprocessing world, because we need
     # some way to communicate back from the subprocesses that the execution
     # actually happened... instead we just test it in serial
     # mode. (Fortunately it is a super-trivial function.)
-    z = ZSS(test_data_path("letters-none.zss"), parallelism=0)
+    z = ZS(test_data_path("letters-none.zs"), parallelism=0)
     # b/c we're in serial mode, the fn doesn't need to be pickleable
     class CountBlocks(object):
         def __init__(self):
@@ -189,9 +189,9 @@ def test_block_exec():
     assert count_blocks.count == len(list(z.block_map(identity)))
 
 def test_big_headers():
-    from zss.reader import _lower_header_size_guess
+    from zs.reader import _lower_header_size_guess
     with _lower_header_size_guess():
-        z = ZSS(test_data_path("letters-none.zss"))
+        z = ZS(test_data_path("letters-none.zs"))
         assert z.codec == "none"
         assert z.data_sha256 == letters_sha256
         assert z.metadata == {
@@ -206,7 +206,7 @@ def test_big_headers():
 
 def test_broken_files():
     import glob
-    unchecked_paths = set(glob.glob(test_data_path("broken-files/*.zss")))
+    unchecked_paths = set(glob.glob(test_data_path("broken-files/*.zs")))
     # Files that should fail even on casual use (no validate)
     for basename, msg_fragment in [
             ("short-root", ["partial read", "root index length"]),
@@ -246,15 +246,15 @@ def test_broken_files():
             return False
         # to prevent accidental false success:
         assert not any_match(msg_fragment, basename)
-        p = test_data_path("broken-files/%s.zss" % (basename,))
-        with assert_raises(ZSSCorrupt) as cm:
-            with ZSS(p) as z:
+        p = test_data_path("broken-files/%s.zs" % (basename,))
+        with assert_raises(ZSCorrupt) as cm:
+            with ZS(p) as z:
                 list(z)
                 # use start= to ensure that we do an index traversal
                 list(z.search(start=b"\x00"))
         assert any_match(msg_fragment, str(cm.exception))
-        with assert_raises(ZSSCorrupt) as cm:
-            with ZSS(p) as z:
+        with assert_raises(ZSCorrupt) as cm:
+            with ZS(p) as z:
                 z.validate()
         assert any_match(msg_fragment, str(cm.exception))
         unchecked_paths.discard(p)
@@ -287,9 +287,9 @@ def test_broken_files():
         print(basename)
         # to prevent accidental false success:
         assert msg_fragment not in basename
-        p = test_data_path("broken-files/%s.zss" % (basename,))
-        with ZSS(p) as z:
-            with assert_raises(ZSSCorrupt) as cm:
+        p = test_data_path("broken-files/%s.zs" % (basename,))
+        with ZS(p) as z:
+            with assert_raises(ZSCorrupt) as cm:
                 z.validate()
         assert msg_fragment in str(cm.exception)
         unchecked_paths.discard(p)
@@ -303,8 +303,8 @@ def test_broken_files():
             "good-extension-header-fields",
             ]:
         print(basename)
-        p = test_data_path("broken-files/%s.zss" % (basename,))
-        with ZSS(p) as z:
+        p = test_data_path("broken-files/%s.zs" % (basename,))
+        with ZS(p) as z:
             list(z)
             z.validate()
         unchecked_paths.discard(p)
@@ -314,14 +314,14 @@ def test_broken_files():
 def test_extension_blocks():
     # Check that the reader happily skips over the extension blocks in the
     # middle of the file.
-    with ZSS(test_data_path("broken-files/good-extension-blocks.zss")) as z:
+    with ZS(test_data_path("broken-files/good-extension-blocks.zs")) as z:
         assert list(z) == [b"a", b"b", b"c", b"d"]
 
 def test_ref_loops():
-    # Had a bunch of trouble eliminating reference loops in the ZSS object.
+    # Had a bunch of trouble eliminating reference loops in the ZS object.
     # Don't use 'with' statement here b/c that keeps another ref which just
     # confuses things.
-    z = ZSS(test_data_path("letters-none.zss"))
+    z = ZS(test_data_path("letters-none.zs"))
     try:
         # 1 for 'z', one for the temporary passed to sys.getrefcount
         print(sys.getrefcount(z))

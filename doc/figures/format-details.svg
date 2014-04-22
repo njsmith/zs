@@ -270,9 +270,9 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="0.45961905"
-     inkscape:cx="1162.0955"
-     inkscape:cy="1124.6958"
+     inkscape:zoom="0.64999949"
+     inkscape:cx="937.75082"
+     inkscape:cy="1698.1881"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
@@ -355,7 +355,7 @@
            style="font-weight:bold;text-align:center;text-anchor:middle;fill:#ffffff;fill-opacity:1;font-family:Lato;-inkscape-font-specification:Lato"
            y="-621.85168"
            x="-346.93472"
-           sodipodi:role="line">Complete ZSS file</tspan><tspan
+           sodipodi:role="line">Complete ZS file</tspan><tspan
            id="tspan9918"
            style="font-style:normal;font-variant:normal;font-weight:500;font-stretch:normal;text-align:center;text-anchor:middle;fill:#ffffff;fill-opacity:1;font-family:Inconsolata;-inkscape-font-specification:Inconsolata Medium"
            y="-579.74603"
@@ -393,7 +393,7 @@
            style="font-weight:bold;text-align:center;text-anchor:middle;fill:#ffffff;fill-opacity:1;font-family:Lato;-inkscape-font-specification:Lato"
            y="-454.85168"
            x="-346.93472"
-           sodipodi:role="line">INcomplete (corrupt) ZSS file</tspan><tspan
+           sodipodi:role="line">INcomplete (corrupt) ZS file</tspan><tspan
            id="tspan9918-1"
            style="font-style:normal;font-variant:normal;font-weight:500;font-stretch:normal;text-align:center;text-anchor:middle;fill:#ffffff;fill-opacity:1;font-family:Inconsolata;-inkscape-font-specification:Inconsolata Medium"
            y="-412.746"
@@ -1093,15 +1093,15 @@
       <text
          xml:space="preserve"
          style="font-size:36px;font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;text-indent:0;text-align:start;text-decoration:none;line-height:125%;letter-spacing:0px;word-spacing:0px;text-transform:none;direction:ltr;block-progression:tb;writing-mode:lr-tb;text-anchor:start;baseline-shift:baseline;color:#000000;fill:#333333;fill-opacity:1;fill-rule:nonzero;stroke:none;marker:none;visibility:visible;display:inline;overflow:visible;enable-background:accumulate;font-family:Lato;-inkscape-font-specification:Lato"
-         x="77.957649"
+         x="676.90314"
          y="-575.0509"
          id="text2989-6-0-9-5"
          sodipodi:linespacing="125%"><tspan
            id="tspan10369"
            sodipodi:role="line"
-           x="77.957649"
+           x="676.90314"
            y="-575.0509"
-           style="font-size:64px;font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;text-indent:0;text-align:start;text-decoration:none;line-height:125%;letter-spacing:0px;word-spacing:0px;text-transform:none;direction:ltr;block-progression:tb;writing-mode:lr-tb;text-anchor:start;baseline-shift:baseline;color:#000000;fill:#333333;fill-opacity:1;fill-rule:nonzero;stroke:none;marker:none;visibility:visible;display:inline;overflow:visible;enable-background:accumulate;font-family:Lato;-inkscape-font-specification:Lato">ZSS file format: detailed internal structure</tspan></text>
+           style="font-size:64px;font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;text-indent:0;text-align:center;text-decoration:none;line-height:125%;letter-spacing:0px;word-spacing:0px;text-transform:none;direction:ltr;block-progression:tb;writing-mode:lr-tb;text-anchor:middle;baseline-shift:baseline;color:#000000;fill:#333333;fill-opacity:1;fill-rule:nonzero;stroke:none;marker:none;visibility:visible;display:inline;overflow:visible;enable-background:accumulate;font-family:Lato;-inkscape-font-specification:Lato">ZS file format: detailed internal structure</tspan></text>
       <rect
          style="color:#000000;fill:#0a6e15;fill-opacity:1;fill-rule:nonzero;stroke:#06420d;stroke-width:10;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0;marker:none;visibility:visible;display:inline;overflow:visible;enable-background:accumulate"
          id="rect2985"
@@ -1592,7 +1592,7 @@
          inkscape:connector-curvature="0" />
       <path
          style="color:#000000;fill:none;stroke:#b01d00;stroke-width:5;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0;marker:none;marker-end:url(#Arrow2MendswrS);visibility:visible;display:inline;overflow:visible;enable-background:accumulate"
-         d="m 767.36695,-152.54021 c 3.0686,37.4509 -9.1775,42.5122 61.2392,42.7839"
+         d="m 696.98228,-152.54021 c 3.0686,37.4509 61.20717,42.5122 131.62387,42.7839"
          id="path4262-4-62-9-8-1-9-2-9"
          inkscape:connector-curvature="0"
          sodipodi:nodetypes="cc" />

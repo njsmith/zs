@@ -1,25 +1,25 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
 import sys
 
-from .util import open_zss
+from .util import open_zs
 
 def command_dump(opts):
-    """Unpack some or all of the contents of a .zss file.
+    """Unpack some or all of the contents of a .zs file.
 
 Usage:
-  zss dump <zss_file>
-  zss dump [--start=START] [--stop=STOP] [--prefix=PREFIX]
+  zs dump <zs_file>
+  zs dump [--start=START] [--stop=STOP] [--prefix=PREFIX]
            [--terminator=TERMINATOR | --length-prefixed=TYPE]
            [-j PARALLELISM]
            [-o FILE]
-           [--] <zss_file>
-  zss dump --help
+           [--] <zs_file>
+  zs dump --help
 
 Arguments:
-  <zss_file>  Path or URL pointing to a .zss file. An argument beginning with
+  <zs_file>  Path or URL pointing to a .zs file. An argument beginning with
               the four characters "http" will be treated as a URL.
 
 Selection options:
@@ -45,7 +45,7 @@ Record framing options:
                            prefix each record with its length, encoded as
                            TYPE. (Options: uleb128, u64le)
 
-  ZSS files are organized as a collection of records, which may contain
+  ZS files are organized as a collection of records, which may contain
   arbitrary data. By default, these are output as individual lines. However,
   this may not be a great idea if you have records which themselves contain
   newline characters. As an alternative, you can request that they instead be
@@ -62,7 +62,7 @@ Record framing options:
     if hasattr(out_file, "buffer"):
         out_file = out_file.buffer
 
-    with open_zss(opts) as z:
+    with open_zs(opts) as z:
         z.dump(out_file,
                start=opts["__start__"],
                stop=opts["__stop__"],

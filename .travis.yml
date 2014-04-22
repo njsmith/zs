@@ -16,11 +16,11 @@ install:
   - mkdir empty
   - cd empty
   - pip install ../dist/*
-  - INSTALLDIR=$(python -c "import os; import zss; print(os.path.dirname(zss.__file__))")
+  - INSTALLDIR=$(python -c "import os; import zs; print(os.path.dirname(zs.__file__))")
 script:
-  # tell the tests that missing the 'zss' script is a hard-error
-  - export ZSS_REQUIRE_SCRIPT_TEST=1
-  - nosetests --all-modules --with-cov --cov-conf ../.coveragerc --cov-report term-missing --cov ${INSTALLDIR} zss
+  # tell the tests that missing the 'zs' script is a hard-error
+  - export ZS_REQUIRE_SCRIPT_TEST=1
+  - nosetests --all-modules --with-cov --cov-conf ../.coveragerc --cov-report term-missing --cov ${INSTALLDIR} zs
 after_success:
   - pip install coveralls && coveralls
 notifications:

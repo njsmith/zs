@@ -1,8 +1,8 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
-# A tiny shim to let zss.reader pretend to use
+# A tiny shim to let zs.reader pretend to use
 # concurrent.futures.ProcessPoolExecutor on any version of Python, and whether
 # or not we're actually using parallelism.
 #
@@ -20,7 +20,7 @@
 # well. So we have a SerialExecutor shim in here as well.
 #
 # These objects only implement the parts of the concurrent.futures API that
-# zss.reader actually uses:
+# zs.reader actually uses:
 # - Executor.submit()
 # - Future.result()
 # - Future.cancel()
@@ -44,7 +44,7 @@ class _SerialFuture(object):
         pass
 
 # It's important that we defer execution of the function until .result() is
-# called, because zss.reader.ZSS calls .submit() from a separate thread, and
+# called, because zs.reader.ZS calls .submit() from a separate thread, and
 # .result() from the main thread.  We don't want to be shunting arbitrary
 # calls off to the separate thread. Also, this ensures that exceptions are
 # raised from result(), not submit().

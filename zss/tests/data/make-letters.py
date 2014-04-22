@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -9,7 +9,7 @@ import os
 from six import BytesIO, int2byte, byte2int
 import binascii
 
-from zss import ZSSWriter
+from zs import ZSWriter
 
 letters_records = []
 for i in xrange(1, 26, 2):
@@ -20,10 +20,10 @@ def letters_file():
     return BytesIO(b"\n".join(letters_records + [b""]))
 
 def do_write(codec, branching_factor, approx_block_size):
-    path = "letters-%s.zss" % codec
+    path = "letters-%s.zs" % codec
     if os.path.exists(path):
         os.unlink(path)
-    with ZSSWriter(path,
+    with ZSWriter(path,
                    metadata={u"test-data": u"letters",
                              u"build-info": {
                                  u"user": u"test-user",

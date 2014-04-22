@@ -1,8 +1,8 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
-# Transports couple the ZSS reader to a data source.
+# Transports couple the ZS reader to a data source.
 
 import os
 import re
@@ -10,7 +10,7 @@ import re
 from six import BytesIO
 import requests
 
-from .common import ZSSError
+from .common import ZSError
 
 class FileTransport(object):
     remote = False
@@ -67,7 +67,7 @@ class HTTPTransport(object):
         else:
             offset = int(match.group(1))
         if offset != desired_offset:
-            raise ZSSError("HTTP server did not respect Range: request")
+            raise ZSError("HTTP server did not respect Range: request")
         if match and match.group(2) != "*":
             self._length = int(match.group(2))
 

@@ -3,7 +3,7 @@
 Metadata conventions
 ====================
 
-The ZSS format puts few constraints on the metadata included in the file.
+The ZS format puts few constraints on the metadata included in the file.
 
 ::
 

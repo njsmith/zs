@@ -1,4 +1,4 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
@@ -7,16 +7,16 @@ import bz2
 import struct
 import ctypes
 
-import zss._zss
+import zs._zs
 
 CRC_LENGTH = 8
 
 # Reserve high levels for future extensions.
 FIRST_EXTENSION_LEVEL = 64
 
-# "ZSS", three bytes from urandom, and 2 bytes to serve as a version
+# "ZS", three bytes from urandom, and 2 bytes to serve as a version
 # identifier in case that turns out to be useful.
-MAGIC = b"ZSS\x1c\x8e\x6c\x00\x01"
+MAGIC = b"ZS\x1c\x8e\x6c\x00\x01"
 # This is what we stick at the beginning of a file while we constructing it in
 # the first place, before it is complete and coherent.
 INCOMPLETE_MAGIC = b"SSZ\x1c\x8e\x6c\x00\x01"
@@ -39,23 +39,23 @@ header_data_format = [
     ("metadata", "length-prefixed-utf8-json"),
     ]
 
-class ZSSError(Exception):
-    """Exception class used for most errors encountered in the ZSS
+class ZSError(Exception):
+    """Exception class used for most errors encountered in the ZS
     package. (Though we do sometimes raise exceptions of the standard Python
     types like :class:`IOError`, :class:`ValueError`, etc.)
 
     """
     pass
 
-class ZSSCorrupt(ZSSError):
-    """A subclass of :class:`ZSSError`, used specifically for errors that
-    indicate a malformed or corrupted ZSS file.
+class ZSCorrupt(ZSError):
+    """A subclass of :class:`ZSError`, used specifically for errors that
+    indicate a malformed or corrupted ZS file.
 
     """
     pass
 
 def encoded_crc64xz(data):
-    return struct.pack("<Q", zss._zss.crc64xz(data))
+    return struct.pack("<Q", zs._zs.crc64xz(data))
 
 # Standardize the name of the compress_level argument:
 def deflate_compress(payload, compress_level=6):
@@ -97,7 +97,7 @@ codecs = {
 def read_n(f, n):
     data = f.read(n)
     if len(data) < n:
-        raise ZSSCorrupt("unexpectedly encountered end of file")
+        raise ZSCorrupt("unexpectedly encountered end of file")
     return data
 
 def read_format(f, struct_format):
@@ -121,7 +121,7 @@ def read_length_prefixed(f, mode):
     if mode == "u64le":
         get_length = read_u64le
     elif mode == "uleb128":
-        get_length = zss._zss.read_uleb128
+        get_length = zs._zs.read_uleb128
     else:
         raise ValueError("length-prefix mode must be u64le or uleb128")
     while True:
@@ -166,7 +166,7 @@ def write_length_prefixed(f, records, mode):
             f.write(struct.pack("<Q", len(record)))
             f.write(record)
     elif mode == "uleb128":
-        f.write(zss._zss.pack_data_records(records))
+        f.write(zs._zs.pack_data_records(records))
     else:
         raise ValueError("length prefixed mode must be 'uleb128' or 'u64le'")
 

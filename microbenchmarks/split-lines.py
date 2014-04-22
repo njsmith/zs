@@ -34,7 +34,7 @@ import sys
 #         w(line + "\n")
 
 # # ~ 52 MiB/s on ged
-# from zss._zss import to_uleb128
+# from zs._zs import to_uleb128
 # BUFSIZE = 2 ** 20
 # leftover = ""
 # w = sys.stdout.write
@@ -66,7 +66,7 @@ import sys
 
 # ~ 48 MiB/s on ged
 # BUFSIZE = 2 ** 20
-# from zss._zss import to_uleb128
+# from zs._zs import to_uleb128
 # def doit():
 #     leftover = ""
 #     w = sys.stdout.write
@@ -96,7 +96,7 @@ import sys
 #   32768: 152 MiB/s
 #   65536: 155 MiB/s
 BUFSIZE = int(sys.argv[1])
-from zss._zss import pack_data_records
+from zs._zs import pack_data_records
 def doit():
     leftover = ""
     w = sys.stdout.write

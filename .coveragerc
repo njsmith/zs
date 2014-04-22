@@ -1,6 +1,6 @@
 [run]
 branch=True
-source=zss
+source=zs
 omit=
   */tests/*
   setup.py

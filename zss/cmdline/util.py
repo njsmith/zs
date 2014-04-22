@@ -1,21 +1,21 @@
-# This file is part of ZSS
+# This file is part of ZS
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
 import sys
 
-from zss import ZSS
+from zs import ZS
 
-def open_zss(opts):
+def open_zs(opts):
     kwargs = {}
-    zss_path_or_url = opts["<zss_file>"]
-    if zss_path_or_url.startswith("http"):
-        kwargs["url"] = zss_path_or_url
+    zs_path_or_url = opts["<zs_file>"]
+    if zs_path_or_url.startswith("http"):
+        kwargs["url"] = zs_path_or_url
     else:
-        kwargs["path"] = zss_path_or_url
+        kwargs["path"] = zs_path_or_url
     if "__j__" in opts:
         kwargs["parallelism"] = opts["__j__"]
-    return ZSS(**kwargs)
+    return ZS(**kwargs)
 
 def optfail(msg):
     sys.stderr.write(msg)
