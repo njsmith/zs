@@ -3,7 +3,7 @@
 Metadata conventions
 ====================
 
-The ZSS format puts few constraints on what metadata you put in your
+The ZSS format puts few constraints on the metadata included in the file.
 
 ::
 
@@ -24,6 +24,6 @@ Some other items you might want to consider including:
 * Bibliographic references for papers giving details about how the
   data was collected, and that users of this data might want to cite.
 
-* A contact email address.
+* Contact information.
 
-* Your `ORCID <http://orcid.org/>`_.
+* Any relevant DOIs or `ORCIDs <http://orcid.org/>`_.

@@ -10,12 +10,7 @@ else:
 
 DESC = """Compressed sorted sets -- a space-efficient, static database."""
 
-LONG_DESC = (DESC + "\n"
-             "Tools for creating and using the ``.zss`` file format,\n"
-             "which allows for the storage of large, compressible\n"
-             "data sets in a way that allows for efficient random access,\n"
-             "range queries, and decompression. (Original use case:\n"
-             "working with the multi-terabyte Google n-gram releases.)")
+LONG_DESC = (DESC + "\n\n" + open("README.rst").read())
 
 if USE_CYTHON:
     cython_ext = "pyx"
@@ -41,6 +36,7 @@ setup(
     author="Nathaniel J. Smith",
     author_email="njs@pobox.com",
     url="https://github.com/njsmith/zss",
+    license="2-clause BSD",
     classifiers =
       [ "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
