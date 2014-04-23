@@ -36,6 +36,9 @@ from zs._zs import (pack_data_records, pack_index_records,
 # seconds
 ERROR_CHECK_FREQ = 0.1
 
+# update the spinner every time we write this many bytes to the file
+SPIN_UPDATE_BYTES = 10 * 2 ** 20
+
 def _flush_file(f):
     f.flush()
     os.fsync(f.fileno())
@@ -516,25 +519,17 @@ def _write_worker(path, branching_factor,
                   write_queue, finish_queue,
                   show_spinner, error_queue):
     data_appender = _ZSDataAppender(path, branching_factor,
-                                     compress_fn, codec_kwargs)
+                                    compress_fn, codec_kwargs,
+                                    show_spinner)
     pending_jobs = {}
     wanted_job = 0
     get = write_queue.get
     write_block = data_appender.write_block
-    def spin(done=False):
-        if show_spinner and (done or wanted_job % 100 == 0):
-            if wanted_job > 0:
-                sys.stdout.write("\r")
-            sys.stdout.write("zs: Data blocks written: %s" % (wanted_job,))
-            if done:
-                sys.stdout.write("\n")
-            sys.stdout.flush()
     with errors_to(error_queue):
         while True:
             job = get()
             #sys.stderr.write("write_worker: got\n")
             if job is _QUIT:
-                spin(done=True)
                 assert not pending_jobs
                 header_info = data_appender.close_and_get_header_info()
                 finish_queue.put(header_info)
@@ -543,7 +538,6 @@ def _write_worker(path, branching_factor,
             while wanted_job in pending_jobs:
                 #sys.stderr.write("write_worker: writing %s\n" % (wanted_job,))
                 write_block(0, *pending_jobs[wanted_job])
-                spin()
                 del pending_jobs[wanted_job]
                 wanted_job += 1
 
@@ -552,7 +546,8 @@ def _write_worker(path, branching_factor,
 # overhead that handling it in serial with the actual writes won't create a
 # bottleneck...
 class _ZSDataAppender(object):
-    def __init__(self, path, branching_factor, compress_fn, codec_kwargs):
+    def __init__(self, path, branching_factor, compress_fn, codec_kwargs,
+                 show_spinner):
         self._file = open(path, "ab")
         # Opening in append mode should put us at the end of the file, but
         # just in case...
@@ -571,6 +566,27 @@ class _ZSDataAppender(object):
         self._level_lengths = []
         self._hasher = hashlib.sha256()
 
+        # spinner-related stuff
+        self._written_bytes = 0
+        self._written_blocks = 0
+        self._show_spinner = show_spinner
+
+    def _spin(self, written_bytes, written_blocks, done):
+        if not self._show_spinner:
+            return
+        self._written_blocks += written_blocks
+        old_tick = self._written_bytes % SPIN_UPDATE_BYTES
+        self._written_bytes += written_bytes
+        new_tick = self._written_bytes % SPIN_UPDATE_BYTES
+        if done or old_tick != new_tick:
+            if old_tick > 0:
+                sys.stdout.write("\r")
+            sys.stdout.write("zs: Blocks written: %s"  # no \n
+                             % (self._written_blocks,))
+            if done:
+                sys.stdout.write("\n")
+            sys.stdout.flush()
+
     def write_block(self, level, first_record, last_record, payload, zpayload):
         if not (0 <= level < FIRST_EXTENSION_LEVEL):
             raise ZSError("invalid level %s" % (level,))
@@ -584,6 +600,8 @@ class _ZSDataAppender(object):
         self._file.write(block_contents)
         self._file.write(encoded_crc64xz(block_contents))
         total_block_length = self._file.tell() - block_offset
+
+        self._spin(total_block_length, 1, False)
 
         if level >= len(self._level_entries):
             # First block we've seen at this level
@@ -635,6 +653,7 @@ class _ZSDataAppender(object):
             # Otherwise, we are done!
             return True
 
+        self._spin(0, 0, True)
         if not self._level_entries:
             raise ZSError("cannot create empty ZS file")
 
