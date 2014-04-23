@@ -1,4 +1,5 @@
 from setuptools import setup, Extension, find_packages
+import sys
 import os.path
 
 
