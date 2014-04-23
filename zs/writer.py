@@ -653,7 +653,6 @@ class _ZSDataAppender(object):
             # Otherwise, we are done!
             return True
 
-        self._spin(0, 0, True)
         if not self._level_entries:
             raise ZSError("cannot create empty ZS file")
 
@@ -662,6 +661,10 @@ class _ZSDataAppender(object):
                 if self._level_entries[level]:
                     self._flush_index(level)
                     break
+
+        # wait until the root has been flushed
+        self._spin(0, 0, True)
+
         _flush_file(self._file)
         self._file.close()
         root_entry = self._level_entries[-1][0]
