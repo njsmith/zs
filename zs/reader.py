@@ -216,7 +216,7 @@ class ZS(object):
       will be used internally for decompression and other CPU-intensive
       tasks. ``parallelism=1`` means to spawn 1 worker process; if you want to
       perform decompression and other such tasks in serial in your main
-      thread, then uses ``parallelism=0``. The default of
+      thread, then use ``parallelism=0``. The default of
       ``parallelism="auto"`` means to spawn one worker process per available
       CPU.
 
@@ -230,6 +230,7 @@ class ZS(object):
 
         with ZS("./my/favorite.zs") as z:
             ...
+
     """
     def __init__(self, path=None, url=None,
                  parallelism="auto", index_block_cache=32):
@@ -752,11 +753,17 @@ class ZS(object):
 
         """
         self._check_closed()
-        sbm = self.block_map
-        with closing(sbm(_dump_helper,
-                         start=start, stop=stop, prefix=prefix,
-                         args=(terminator, length_prefixed))) as it:
-            out_file.writelines(it)
+        with closing(self.block_map(_dump_helper,
+                                    start=start, stop=stop, prefix=prefix,
+                                    args=(terminator, length_prefixed))) as it:
+            # .writelines() has the same semantics, but for some reason (at
+            # least on Python 2.7) it likes to queue up a whole bunch of
+            # records and then write them all at once (presumably to amortize
+            # the IO costs). We're already amortizing the cost of operations
+            # over blocks, so it's better to just reimplement .writelines():
+            #out_file.writelines(it)
+            for chunk in it:
+                out_file.write(chunk)
 
     def validate(self):
         """Validate this .zs file for correctness.
