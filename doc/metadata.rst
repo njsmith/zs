@@ -5,6 +5,10 @@ Metadata conventions
 
 The ZS format puts few constraints on the metadata included in the file.
 
+unopinionated
+most data sets are unique, so no point trying to define a universal
+schema for all of them
+
 ::
 
    "build-info": {"user": ..., "host": ..., "time": ...}

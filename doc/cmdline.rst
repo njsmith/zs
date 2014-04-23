@@ -205,6 +205,18 @@ Full options:
 
 .. command-output:: zs dump --help
 
+.. warning:: Due to limitations in the multiprocessing module in
+   Python 2, ``zs dump`` can be poorly behaved if you hit control-C
+   (e.g., refusing to exit).
+
+   On a Unix-like platform, if you have a ``zs dump`` that is ignoring
+   control-C, then try hitting control-Z and then running ``kill
+   %zs``.
+
+   The easy workaround to this problem is to use Python 3 to run
+   ``zs``. The not so easy workaround is to implement a custom process
+   pool manager for Python 2 -- patches accepted!
+
 .. _zs validate:
 
 ``zs validate``
