@@ -44,7 +44,7 @@ def run(args, expected_returncode=0, input=b"", zs_cmd=CMD):
     except:
         print("args: %r" % (args,))
         print("stdout: %r" % (stdout,))
-        print("stderr: %r" % (stdout,))
+        print("stderr: %r" % (stderr,))
         print("returncode: %r" % (returncode,))
         raise
     return RunResult(returncode, stdout, stderr)
