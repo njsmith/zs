@@ -43,3 +43,4 @@ def do_write(codec, branching_factor, approx_block_size):
 do_write("none", 2, 4)
 do_write("deflate", 3, 3)
 do_write("bz2", 4, 5)
+do_write("lzma", 5, 3)

@@ -26,6 +26,9 @@ if USE_CYTHON:
     #import pdb; pdb.set_trace()
     ext_modules = cythonize(ext_modules)
 
+extra_requires = []
+if sys.version_info[0] < 3:
+    extra_requires += ["backports.lzma"]
 
 # defines __version__
 exec(open("zs/version.py").read())
@@ -73,6 +76,6 @@ setup(
             "zs = zs.cmdline.main:entrypoint",
             ],
     },
-    install_requires=["six", "requests", "docopt"],
+    install_requires=["six", "requests", "docopt"] + extra_requires,
     ext_modules=ext_modules,
 )

@@ -28,3 +28,25 @@ on the 'old/sorted' test vector, using branna, and python3
 | lzma -0e |  810799 | 4520 ms       | 104 ms          |
 | lzma -1e |  805229 | 5900 ms       | 103 ms          |
 | deflate  | 1441904 | 323 ms        | 20.6 ms         |
+
+using old/smalltest:
+
+the dump times here are highly variable...
+
+| alg     | blocksize |     size | make walltime | dump walltime |
+|---------+-----------+----------+---------------+---------------|
+| lzma 0e | 128 KiB   | 27663364 | 42 s          | 2.387 s       |
+| lzma 0e | 1024 KiB  | 27197990 | 50 s          | 1.993 s       |
+| lzma 0e | 2048 KiB  | 27173018 | 52 s          |               |
+
+for single zpayloads on my laptop, lzma.decompress is 16 ms for the 1M uncompressed block size, and 2.5 ms for the 128K uncompressed block size.
+
+maybe 512K -> 10 ms -> about the same as a disk seek?
+
+* Better parallelism
+
+since it seems that we spend a lot of time in IPC for a streaming reads, it's possible we should switch to threads instead of processes.
+
+this wouldn't be too hard -- the trick would be to write a tiny circular queue in Cython, start threads using the standard Python APIs, and have all the threads execute a Cython loop that drops the GIL and then pulls char*'s off the queue and puts back decompressed char*'s.
+
+we might even get away with using the GIL to serialize access to the queue, and just using Cython to get a GIL-dropping interface to lzma_decompress etc. Actually I guess the lzma module already has per-compressor locking, it's just zlib and bz2 that are unhelpful this way.

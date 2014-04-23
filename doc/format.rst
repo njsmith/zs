@@ -231,7 +231,7 @@ The header contains the following fields, in order:
   contents of a ZS file, regardless of storage details like
   compression mode, block size, index fanout, etc.
 
-* Codec (16 bytes): A null-padded string specifying the codec
+* Codec (16 bytes): A null-padded ASCII string specifying the codec
   (compression method) used. Currently defined codecs include:
 
   * ``none``: Block payloads are stored in raw, uncompressed form.
@@ -249,6 +249,16 @@ The header contains the following fields, in order:
     available libraries, so using this method adds 10-20 bytes of
     extra framing overhead. Fortunately the improved compression
     usually more than makes up for this.
+
+  * ``lzma2``: Block payloads are represented as raw LZMA2 bitstreams
+    that can be decompressed using a dictionary size of :math:`2^22`
+    bytes (i.e., 4 MiB). This means you can use the standard XZ
+    presets 0 through 4, including the "extreme" 0e through 4e modes,
+    but not higher. It also means that each decompression thread will
+    need ~5 MiB of memory. Raw LZMA2 streams are ~0.5% smaller than XZ
+    streams, so that's nice, but more importantly this dramatically
+    reduces the requirements on readers -- e.g., it guarantees that
+    the XZ Embedded edition will always be sufficient.
 
 * Metadata length (``u64le``): The length of the next field:
 

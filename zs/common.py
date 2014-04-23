@@ -31,7 +31,8 @@ header_data_format = [
     # A null-padded code for the storage algorithm used. So far:
     #   "none"
     #   "deflate"
-    #   "bzip2"
+    #   "bz2"
+    #   "lzma"
     ("codec", "NUL-padded-ascii-16"),
     # "<Q" giving length, then arbitrary utf8-encoded json
     ("metadata", "length-prefixed-utf8-json"),
@@ -85,12 +86,56 @@ def none_compress(payload):
 def none_decompress(zpayload):
     return zpayload
 
+have_lzma = True
+try:
+    import lzma
+except ImportError:
+    try:
+        from backports import lzma
+    except ImportError:
+        have_lzma = False
+
+if have_lzma:
+    def lzma_compress(payload, compress_level=0, extreme=True):
+        if compress_level > 4:
+            raise ValueError("lzma compress level must be 4 or less")
+        if extreme:
+            compress_level |= lzma.PRESET_EXTREME
+        return lzma.compress(payload,
+                             format=lzma.FORMAT_RAW,
+                             filters=[{
+                                 "id": lzma.FILTER_LZMA2,
+                                 "preset": compress_level,
+                             }])
+
+    _lzma_decompress_filter_chain = [{
+        "id": lzma.FILTER_LZMA2,
+        "dict_size": 2 ** 22,
+    }]
+    def lzma_decompress(zpayload):
+        # LZMADecompressor is different from the lzma.decompress convenience
+        # wrapper in that it won't automatically handle concatenated
+        # streams. And that's what we want.
+        decobj = lzma.LZMADecompressor(format=lzma.FORMAT_RAW,
+                                       filters=_lzma_decompress_filter_chain)
+        payload = decobj.decompress(zpayload)
+        if not decobj.eof:
+            raise ZSSCorrupt("LZMA2 stream cut-off in the middle")
+        if decobj.unused_data:
+            raise ZSSCorrupt("trailing garbage after LZMA2 stream")
+        return payload
+else:
+    def no_lzma(*args, **kwargs):
+        raise ImportError("please install the backports.lzma package")
+    lzma_compress = lzma_decompress = no_lzma
+
 # These callables must be pickleable for multiprocessing.
 codecs = {
     "deflate": (deflate_compress, deflate_decompress),
     "bz2": (bz2_compress, bz2.decompress),
     "none": (none_compress, none_decompress),
-    }
+    "lzma2": (lzma_compress, lzma_decompress),
+}
 
 def read_n(f, n):
     data = f.read(n)

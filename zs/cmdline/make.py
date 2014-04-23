@@ -70,10 +70,13 @@ Output file options:
   --approx-block-size=SIZE   Approximate *uncompressed* size of the records in
                              each *data* block, in bytes. [default: 131072]
   --codec=CODEC              Compression algorithm. (Valid options: none,
-                             deflate, bz2.) [default: bz2]
+                             deflate, bz2, lzma.) [default: bz2]
   -z COMPRESS-LEVEL, --compress-level=COMPRESS-LEVEL
                              Degree of compression to use. (Default: 6 for
-                             deflate, 9 for bz2.)
+                             deflate, 9 for bz2, 0e for lzma. Note that for
+                             lzma, using plain '0' or '1' will be several
+                             times faster than '0e' or '1e', though at some
+                             cost in compression ratio.)
   --no-default-metadata      By default, 'zs make' adds an extra "build-info"
                              key to the metadata, recording the time, host,
                              and user who created the file. This option
@@ -86,20 +89,16 @@ Output file options:
     except ValueError as e:
         optfail("error parsing metadata as JSON: %s" % (e,))
 
-    codec_kwargs = {}
-    if "__compress-level__" in opts:
-        codec_kwargs["compress_level"] = opts["__compress-level__"]
-
     sys.stdout.write("zs: Opening new ZS file: %s\n"
                      % (opts["<new_zs_file>"],))
     with ZSWriter(opts["<new_zs_file>"],
-                   metadata=metadata,
-                   branching_factor=opts["__branching-factor__"],
-                   parallelism=opts["__j__"],
-                   codec=opts["--codec"],
-                   codec_kwargs=codec_kwargs,
-                   show_spinner=not opts["--no-spinner"],
-                   include_default_metadata=not opts["--no-default-metadata"],
+                  metadata=metadata,
+                  branching_factor=opts["__branching-factor__"],
+                  parallelism=opts["__j__"],
+                  codec=opts["--codec"],
+                  codec_kwargs=opts["__codec_kwargs__"],
+                  show_spinner=not opts["--no-spinner"],
+                  include_default_metadata=not opts["--no-default-metadata"],
                ) as out_z:
         sys.stdout.write("zs: Reading input file: %s\n"
                          % (opts["<input_file>"],))
