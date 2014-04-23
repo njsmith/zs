@@ -15,3 +15,16 @@ https://matthew-brett.github.io/pydagogue/python_msvc.html
 ** zscontrib
 
 ** windows wheels?
+
+* LZMA
+
+on the 'old/sorted' test vector, using branna, and python3
+
+| alg      |    size | compress time | decompress time |
+|----------+---------+---------------+-----------------|
+| bz2      | 1140258 | 799 ms        | 208 ms          |
+| lzma -0  | 1122836 | 340 ms        | 101 ms          |
+| lzma -1  | 1109110 | 396 ms        | 95.7 ms         |
+| lzma -0e |  810799 | 4520 ms       | 104 ms          |
+| lzma -1e |  805229 | 5900 ms       | 103 ms          |
+| deflate  | 1441904 | 323 ms        | 20.6 ms         |
