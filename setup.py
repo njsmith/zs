@@ -2,10 +2,6 @@ from setuptools import setup, Extension, find_packages
 import sys
 import os.path
 
-## RTD test hack
-import subprocess
-subprocess.call(["dpkg", "--list", "python3*"])
-
 if os.path.exists(".this_is_a_checkout"):
     USE_CYTHON = True
 else:
