@@ -16,6 +16,7 @@ from contextlib import contextmanager
 import json
 import binascii
 from unittest.case import SkipTest
+import random
 
 from six import BytesIO
 
@@ -171,25 +172,58 @@ def test_make():
         assert len(r2.stdout) < len(r1.stdout)
 
         # codecs and compress level
-        # some nice big input so that bz2 -1 and -9 will differ:
-        bigger_input = b"\n".join([("%050i" % (i,)).encode("utf-8")
-                                   for i in range(10000)]
-                                  + [b""])
+        # we need some non-trivial input (so the compression algorithms have
+        # some work to do), that's large enough for things like the bz2 window
+        # size to make a difference.
+        r = random.Random(0)
+        scrambled_letters = b"".join(r.sample(b"abcdefghijklmnopqrstuvwxyz", 26))
+        pieces = []
+        for i in xrange(200000):
+            low = r.randrange(25)
+            high = r.randrange(low, 26)
+            pieces.append(scrambled_letters[low:high])
+        # put a really big piece in to make long-distance memory matter more
+        pieces.append(b"m" * 2 ** 18)
+        pieces.sort()
+        pieces.append(b"")
+        bigger_input = b"\n".join(pieces)
+
         sizes = {}
         for settings in ["--codec=none",
                          "--codec=bz2",
                          "--codec=bz2 -z 1",
                          "--codec=deflate",
-                         "--codec=deflate --compress-level 1"]:
+                         "--codec=deflate --compress-level 1",
+                         "--codec=lzma",
+                         "--codec=lzma --compress-level 0e",
+                         "--codec=lzma --compress-level 0",
+                         "--codec=lzma --compress-level 1e",
+                         "--codec=lzma --compress-level 1",
+                         ]:
             with temp_zs_path() as p_out:
-                run(["make", "{}", "-", p_out] + settings.split(),
+                run(["make", "{}", "-", p_out,
+                     # bigger than both the bz2 -z 1 blocksize of 100k
+                     # and the lzma -z 0 blocksize of 256k
+                     "--approx-block-size", "400000"] + settings.split(),
                     input=bigger_input)
                 sizes[settings] = os.stat(p_out).st_size
-        assert sizes["--codec=none"] > sizes["--codec=deflate"]
-        assert sizes["--codec=deflate"] > sizes["--codec=bz2"]
-        assert sizes["--codec=bz2 -z 1"] >= sizes["--codec=bz2"]
-        assert (sizes["--codec=deflate --compress-level 1"]
-                > sizes["--codec=deflate"])
+        assert (sizes["--codec=lzma --compress-level 0e"]
+                == sizes["--codec=lzma"])
+        for big, small in [("none", "deflate"),
+                           ("deflate", "bz2"),
+                           ("bz2", "lzma"),
+                           ("bz2 -z 1", "bz2"),
+                           ("deflate --compress-level 1", "deflate"),
+                           ("lzma --compress-level 0",
+                            "lzma --compress-level 1"),
+                           ("lzma --compress-level 0e",
+                            "lzma --compress-level 1e"),
+                           ("lzma --compress-level 0",
+                            "lzma --compress-level 0e"),
+                           ("lzma --compress-level 1",
+                            "lzma --compress-level 1e"),
+                           ]:
+            assert sizes["--codec=" + big] > sizes["--codec=" + small]
 
         # metadata and no-default-metadata
         for no_default in [True, False]:
@@ -205,6 +239,10 @@ def test_make():
                         assert "build-info" not in z.metadata
                     else:
                         assert "build-info" in z.metadata
+        with temp_zs_path() as p_out:
+            # bad metadata
+            run(["make", "{", "-", p_out], input=NEWLINE_RECORDS,
+                expected_returncode=2)
 
         # approx-block-size
         with temp_zs_path() as p_small, temp_zs_path() as p_big:

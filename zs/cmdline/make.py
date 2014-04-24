@@ -72,11 +72,16 @@ Output file options:
   --codec=CODEC              Compression algorithm. (Valid options: none,
                              deflate, bz2, lzma.) [default: bz2]
   -z COMPRESS-LEVEL, --compress-level=COMPRESS-LEVEL
-                             Degree of compression to use. (Default: 6 for
-                             deflate, 9 for bz2, 0e for lzma. Note that for
-                             lzma, using plain '0' or '1' will be several
-                             times faster than '0e' or '1e', though at some
-                             cost in compression ratio.)
+                             Degree of compression to use. Interpretation
+                             depends on the codec in use:
+                               deflate: An integer between 1 and 9. (Default: 6)
+                               bz2: An integer between 1 and 9. (Default: 9)
+                               lzma: One of the strings 0, 0e, 1, or 1e.
+                                 Note that 0 and 1 are several times faster
+                                 than 0e and 1e, though at some cost in
+                                 compression ratio. Note also that there is no
+                                 benefit to using 1 unless you also increase
+                                 --approx-block-size. (Default: 0e)
   --no-default-metadata      By default, 'zs make' adds an extra "build-info"
                              key to the metadata, recording the time, host,
                              and user who created the file. This option
@@ -89,6 +94,21 @@ Output file options:
     except ValueError as e:
         optfail("error parsing metadata as JSON: %s" % (e,))
 
+    codec_kwargs = {}
+    cl = opts["--compress-level"]
+    if cl is not None:
+        if opts["--codec"] == "lzma":
+            if cl.endswith("e"):
+                codec_kwargs["extreme"] = True
+                cl = cl[:-1]
+            else:
+                codec_kwargs["extreme"] = False
+        try:
+            codec_kwargs["compress_level"] = int(cl)
+        except ValueError:
+            optfail("--compress-level must be an integer, or "
+                    "(for lzma only) an integer followed by the letter e")
+
     sys.stdout.write("zs: Opening new ZS file: %s\n"
                      % (opts["<new_zs_file>"],))
     with ZSWriter(opts["<new_zs_file>"],
@@ -96,7 +116,7 @@ Output file options:
                   branching_factor=opts["__branching-factor__"],
                   parallelism=opts["__j__"],
                   codec=opts["--codec"],
-                  codec_kwargs=opts["__codec_kwargs__"],
+                  codec_kwargs=codec_kwargs,
                   show_spinner=not opts["--no-spinner"],
                   include_default_metadata=not opts["--no-default-metadata"],
                ) as out_z:

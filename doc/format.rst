@@ -261,18 +261,26 @@ The header contains the following fields, in order:
     extra framing overhead. Fortunately the improved compression
     usually more than makes up for this.
 
-  * ``lzma2``: Block payloads are represented as raw LZMA2 bitstreams
-    that can be decompressed using a dictionary size of :math:`2^22`
-    bytes (i.e., 4 MiB). This means you can use the standard XZ
-    presets 0 through 4, including the "extreme" 0e through 4e modes,
-    but not higher. It also means that each decompression thread will
-    need ~5 MiB of memory. Raw LZMA2 streams are ~0.5% smaller than XZ
-    streams, so that's nice, but more importantly this dramatically
-    reduces the requirements on readers -- e.g., it guarantees that
-    the XZ Embedded edition will always be sufficient.
+  * ``lzma2;dsize=2^20``: Block payloads are represented as raw LZMA2
+    bitstreams that can be decompressed using a dictionary size of
+    :math:`2^20` bytes (i.e., 1 MiB); this means that each decoder
+    needs an upper bound of ~2 MiB of memory. Note that while it might
+    look parametrized, this is a simple literal string -- for example,
+    using the encoder string ``lzma2;dsize=2^21`` is illegal. This
+    means you can use the standard XZ presets 0 and 1, including the
+    "extreme" 0e and 1e modes, but not higher. This is pretty
+    reasonable, since there is never any advantage to using a
+    dictionary size that is larger than a single block payload, and we
+    expect 1 MiB blocks to be rare; but, if there is demand, we may
+    add further modes with larger dictionary sizes.
 
-    .. warning:: LZMA2 SUPPORT IS EXPERIMENTAL IT WILL CHANGE I am
-       just too lazy to update the docs at the moment.
+    As compared to using XZ format, raw LZMA2 streams are ~0.5%
+    smaller, so that's nice, but more importantly the use of raw
+    streams dramatically reduces the complexity requirements on
+    readers, which is important for an archival format. Doing things
+    this way means that there's no need to be able to handle the
+    multi-gigabyte dictionary sizes, complicated filter chains,
+    multiple checksums, etc., which the XZ format allows.
 
 * Metadata length (``u64le``): The length of the next field:
 

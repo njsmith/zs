@@ -18,16 +18,17 @@ from datetime import datetime
 import six
 
 from zs.common import (ZSError,
-                        MAGIC,
-                        INCOMPLETE_MAGIC,
-                        FIRST_EXTENSION_LEVEL,
-                        CRC_LENGTH,
-                        encoded_crc64xz,
-                        header_data_format,
-                        header_data_length_format,
-                        codecs,
-                        read_format,
-                        read_length_prefixed)
+                       MAGIC,
+                       INCOMPLETE_MAGIC,
+                       FIRST_EXTENSION_LEVEL,
+                       CRC_LENGTH,
+                       encoded_crc64xz,
+                       header_data_format,
+                       header_data_length_format,
+                       codec_shorthands,
+                       codecs,
+                       read_format,
+                       read_length_prefixed)
 from zs._zs import (pack_data_records, pack_index_records,
                       unpack_data_records,
                       write_uleb128)
@@ -158,8 +159,9 @@ class ZSWriter(object):
 
         :arg codec: The compression method to use.
 
-        :arg codec_kwargs: kwargs to pass to the codec compress
-          function. Most codecs support a compress_level argument.
+        :arg codec_kwargs: kwargs to pass to the codec compress function. All
+          codecs except 'none' support a compress_level argument. The 'lzma'
+          codec also supports an extreme=True/False argument.
 
         :arg show_spinner: Whether to show the progress meter.
 
@@ -211,10 +213,10 @@ class ZSWriter(object):
             # XX put an upper bound on this
             parallelism = multiprocessing.cpu_count()
         self._parallelism = parallelism
-        self.codec = codec
-        if self.codec not in codecs:
+        self.codec = codec_shorthands.get(codec)
+        if self.codec is None:
             raise ZSError("unknown codec %r (should be one of: %s)"
-                           % (codec, ", ".join(codecs)))
+                          % (codec, ", ".join(codec_shorthands)))
         self._compress_fn = codecs[self.codec][0]
         self._codec_kwargs = codec_kwargs
         self._header = {

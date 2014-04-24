@@ -96,9 +96,9 @@ except ImportError:
         have_lzma = False
 
 if have_lzma:
-    def lzma_compress(payload, compress_level=0, extreme=True):
-        if compress_level > 4:
-            raise ValueError("lzma compress level must be 4 or less")
+    def lzma_compress_dsize20(payload, compress_level=0, extreme=True):
+        if compress_level > 1:
+            raise ValueError("lzma compress level must be 0 or 1")
         if extreme:
             compress_level |= lzma.PRESET_EXTREME
         return lzma.compress(payload,
@@ -110,9 +110,9 @@ if have_lzma:
 
     _lzma_decompress_filter_chain = [{
         "id": lzma.FILTER_LZMA2,
-        "dict_size": 2 ** 22,
+        "dict_size": 2 ** 20,
     }]
-    def lzma_decompress(zpayload):
+    def lzma_decompress_dsize20(zpayload):
         # LZMADecompressor is different from the lzma.decompress convenience
         # wrapper in that it won't automatically handle concatenated
         # streams. And that's what we want.
@@ -120,21 +120,32 @@ if have_lzma:
                                        filters=_lzma_decompress_filter_chain)
         payload = decobj.decompress(zpayload)
         if not decobj.eof:
-            raise ZSSCorrupt("LZMA2 stream cut-off in the middle")
+            raise ZSCorrupt("LZMA2 stream cut-off in the middle")
         if decobj.unused_data:
-            raise ZSSCorrupt("trailing garbage after LZMA2 stream")
+            raise ZSCorrupt("trailing garbage after LZMA2 stream")
         return payload
 else:
     def no_lzma(*args, **kwargs):
         raise ImportError("please install the backports.lzma package")
-    lzma_compress = lzma_decompress = no_lzma
+    lzma_compress_dsize20 = lzma_decompress_dsize20 = no_lzma
 
 # These callables must be pickleable for multiprocessing.
 codecs = {
     "deflate": (deflate_compress, deflate_decompress),
     "bz2": (bz2_compress, bz2.decompress),
     "none": (none_compress, none_decompress),
-    "lzma2": (lzma_compress, lzma_decompress),
+    "lzma2;dsize=2^20": (lzma_compress_dsize20, lzma_decompress_dsize20),
+}
+
+# These are the strings passed to ZSWriter.__init__'s codec= argument, or to
+# zs make --codec. In the future if we ever support more lzma dict sizes, then
+# we'll keep the 'lzma' shorthand the same, but add some more cleverness to
+# the code here to automatically pick the right underlying codec string.
+codec_shorthands = {
+    "deflate": "deflate",
+    "bz2": "bz2",
+    "none": "none",
+    "lzma": "lzma2;dsize=2^20",
 }
 
 def read_n(f, n):

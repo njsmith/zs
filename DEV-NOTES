@@ -13,9 +13,6 @@ https://matthew-brett.github.io/pydagogue/python_msvc.html
 * Next
 
 ** "guess"
-** lzma2;dsize=2^20
-
-call it lzma on command line, lzma2;dsize=2^20 everywhere else
 
 ** windows wheels?
 

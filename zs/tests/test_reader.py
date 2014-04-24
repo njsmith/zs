@@ -14,7 +14,7 @@ from .util import test_data_path
 from .http_harness import web_server
 from zs import ZS, ZSError, ZSCorrupt
 from zs._zs import pack_data_records
-from zs.common import read_length_prefixed, codecs
+from zs.common import read_length_prefixed, codec_shorthands
 
 # letters.zs contains records:
 #   [b, bb, d, dd, f, ff, ..., z, zz]
@@ -36,11 +36,11 @@ def _check_map_helper(records, arg1, arg2):
 def _check_raise_helper(records, exc):
     raise exc
 
-def check_letters_zs(z, codec):
+def check_letters_zs(z, codec_shorthand):
     assert isinstance(z.root_index_offset, integer_types)
     assert isinstance(z.root_index_length, integer_types)
     assert isinstance(z.total_file_length, integer_types)
-    assert z.codec == codec
+    assert z.codec == codec_shorthands[codec_shorthand]
     assert z.data_sha256 == letters_sha256
     assert z.metadata == {
         u"test-data": u"letters",
@@ -119,7 +119,7 @@ def check_letters_zs(z, codec):
     z.validate()
 
 def test_zs():
-    for codec in codecs:
+    for codec in codec_shorthands:
         p = test_data_path("letters-%s.zs" % (codec,))
         for parallelism in [0, 2, "auto"]:
             with ZS(path=p, parallelism=parallelism) as z:

@@ -111,21 +111,6 @@ For details, use 'zs <subcommand> --help'.
                         % (opt, subopts[opt]))
 
     # special opts
-    if "--compress-level" in subopts:
-        cl = subopts["--compress-level"]
-        codec_kwargs = {}
-        if cl is not None:
-            # special case for lzma
-            if cl.endswith("e"):
-                codec_kwargs["extreme"] = True
-                cl = cl[:-1]
-            try:
-                codec_kwargs["compress_level"] = int(cl)
-            except ValueError:
-                optfail("--compress-level must be an integer, or "
-                        "(for lzma only) an integer followed by the letter e")
-        subopts["__codec_kwargs__"] = codec_kwargs
-
     if "-j" in subopts:
         if subopts["-j"] == "all cpus":
             subopts["__j__"] = "auto"

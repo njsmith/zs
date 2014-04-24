@@ -146,7 +146,7 @@ these traditional formats:
   format is simple and :ref:`fully documented <format>`; an average
   programmer with access to standard libraries could write a working
   decompressor in a few hours. The reference implementation is
-  BSD-licensed, undergoes exhaustive automated testing (~99% coverage)
+  BSD-licensed, undergoes exhaustive automated testing (>98% coverage)
   after every checkin, and includes an exhaustive file format
   validator, so you can confirm that your files match the spec and be
   confident that they will be readable by any compliant
