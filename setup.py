@@ -12,7 +12,7 @@ DESC = """ZS is a compressed, read-only file format for efficiently
 distributing, querying, and archiving arbitrarily large record-oriented
 datasets."""
 
-LONG_DESC = (DESC + "\n\n" + open("README.rst").read())
+LONG_DESC = open("README.rst").read()
 
 if USE_CYTHON:
     cython_ext = "pyx"
