@@ -23,7 +23,7 @@ script:
   - export ZS_REQUIRE_SCRIPT_TEST=1
   - nosetests --all-modules --with-cov --cov-conf ../.coveragerc --cov-report term-missing --cov ${INSTALLDIR} zs
 after_success:
-  - pip install coveralls && coveralls
+  - pip install coveralls && coveralls --rcfile=../.coveragerc
 notifications:
   email:
   - njs@pobox.com
