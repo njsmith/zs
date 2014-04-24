@@ -11,7 +11,7 @@ structured metadata stored directly inside it.
 
 Basically you can think of ZS as a turbo-charged replacement for
 storing data in line-based text file formats. It was originally
-developed to provide a better way to work with the `Google N-grams
+developed to provide a better way to work with the massive `Google N-grams
 <http://storage.googleapis.com/books/ngrams/books/datasetsv2.html>`_,
 but is potentially useful for data sets of any size.
 
