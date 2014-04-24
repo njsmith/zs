@@ -14,10 +14,10 @@ CRC_LENGTH = 8
 # Reserve high levels for future extensions.
 FIRST_EXTENSION_LEVEL = 64
 
-MAGIC = b"ZS file\x00"
+MAGIC = b"\xab" b"ZSfiLe" b"\x01"
 # This is what we stick at the beginning of a file while we constructing it in
 # the first place, before it is complete and coherent.
-INCOMPLETE_MAGIC = b"ZSlater\x00"
+INCOMPLETE_MAGIC = b"\xab" b"ZStoBe" b"\x01"
 header_data_length_format = "<Q"
 header_data_format = [
     # The offset of the top-level index block.

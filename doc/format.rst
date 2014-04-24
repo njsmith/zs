@@ -8,8 +8,8 @@ along with rationale for specific design choices. It should be read by
 anyone who plans to implement a new reader or writer for the
 format, or is just interested in how things work under the covers.
 
-Overview and general notes
---------------------------
+Overview
+--------
 
 ZS is a read-only database format designed to store a `multiset
 <https://en.wikipedia.org/wiki/Multiset>`_ of records, where each
@@ -77,11 +77,22 @@ first we traverse the index to figure out which blocks contain records
 that fall into our range, and then we do a streaming read across these
 blocks.
 
-Checksumming
-------------
+General notes
+-------------
 
-To achieve our data integrity goals, every byte in the file that could
-possibly contain undetected corruption is protected by a 64-bit
+Language
+''''''''
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+"SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
+document are to be interpreted as described in `RFC 2119
+<https://www.ietf.org/rfc/rfc2119.txt>`_.
+
+Checksumming
+''''''''''''
+
+To achieve our data integrity goals, every byte in a ZS file that
+could possibly contain undetected corruption is protected by a 64-bit
 CRC. Specifically, we use the same CRC-64 calculation that the `.xz
 file format <http://tukaani.org/xz/xz-file-format.txt>`_ does. The
 `Rocksoft model <http://www.ross.net/crc/crcpaper.html>`_ parameters
@@ -92,9 +103,9 @@ init = 0xffffffffffffffff, reflect out = True, xor out =
 .. _integer-representations:
 
 Integer representations
------------------------
+'''''''''''''''''''''''
 
-Within the header, we make life easier for simple tools like `file
+Within the ZS header, we make life easier for simple tools like `file
 <https://en.wikipedia.org/wiki/File_%28command%29>`_ by encoding all
 integers using fixed-length 64-bit little-endian format (``u64le`` for
 short).
@@ -123,10 +134,12 @@ done. Examples::
   80 80 80 80 20             2 ** 33
 
 (This format is also used by `protocol buffers
-<https://en.wikipedia.org/wiki/Protocol_Buffers>`_.) This format
-allows for redundant representations by adding leading zeros, e.g. the
-value 0 could also be written ``80 00``. However, doing this is
-forbidden; all values must be encoded in their shortest form.
+<https://en.wikipedia.org/wiki/Protocol_Buffers>`_, by the `XZ file
+format <http://tukaani.org/xz/xz-file-format-1.0.4.txt>`_, and
+others.) This format allows for redundant representations by adding
+leading zeros, e.g. the value 0 could also be written ``80
+00``. However, doing so is forbidden; all values MUST be encoded in
+their shortest form.
 
 Layout details
 --------------
@@ -149,49 +162,47 @@ Magic number
 To make it easy to distinguish ZS files from non-ZS files, every
 valid ZS file begins with 8 `magic bytes
 <https://en.wikipedia.org/wiki/File_format#Magic_number>`_. Specifically,
-these ones (written in hex)::
+these ones (written in hex, with ASCII below)::
 
-  5a 53 20 66 69 6c 65 00   # Good magic
+  ab 5a 53 66 69 4c 65 01   # Good magic
+      Z  S  f  i  L  e
 
-This is the ascii string ``ZS file``, followed by a null byte. If
-there's ever a ZS version 2, we'll use this last byte as a version
-number.
+If there's ever an incompatible ZS version 2, we'll use the last byte
+as a version number.
 
-Writing out a large ZS file is a somewhat involved operation that
-might take a long time. It's possible for a hardware or software
-problem to occur and cause this process to be aborted before the file
-is completely written, leaving behind a partial, corrupt ZS
-file. Because ZS is designed as a reliable archival format we would
-like to avoid the possibility of confusing a corrupt file with a
-correct one, and because writing ZS files can be slow, after a crash
-we would like to be able to reliably determine whether the writing
-operation had completed, to know whether we can trust the file left
+Writing out a large ZS file is an involved operation that might take a
+long time. It's possible for a hardware or software problem to occur
+and cause this process to be aborted before the file is completely
+written, leaving behind a partial, corrupt ZS file. Because ZS is
+designed as a reliable archival format we would like to avoid the
+possibility of confusing a corrupt file with a correct one, and
+because writing ZS files can be slow, after a crash we would like to
+be able to reliably determine whether the writing operation had
+completed, to know whether we can trust the file left
 behind. Therefore we also define a second magic number to be used
 specifically for partial ZS files::
 
-  5a 53 6c 61 74 65 72 00   # Bad magic
+  ab 5a 53 74 6f 42 65 01   # Bad magic
+      Z  S  t  o  B  e
 
-This is the ascii string ``ZSlater`` followed by a null byte.
+It is RECOMMENDED that ZS file writers perform the following sequence:
 
-It is strongly recommended that ZS file writers perform the following
-sequence:
-
-* Write out the ``ZSlater`` magic number.
+* Write out the ``ZStoBe`` magic number.
 * Write out the rest of the ZS file.
 * Update the header to its final form (including, e.g., the offset of
   the root block).
 * (IMPORTANT) Sync the file to disk using ``fsync()`` or equivalent.
-* Replace the ``ZSlater`` magic number with the correct
-  ``ZS file`` magic number.
+* Replace the ``ZStoBe`` magic number with the correct
+  ``ZSfiLe`` magic number.
 
 Following this procedure guarantees that, modulo disk corruption, any
 file which begins with the correct ZS magic will in fact be a
 complete, valid ZS file.
 
-Any file which does not begin with the correct ZS magic is not a
-valid ZS file, and should be rejected by ZS file readers. Files with
-the ``ZSlater`` magic are not valid ZS files. However, polite ZS readers
-should generally check for the ``ZSlater`` magic, and if encountered,
+Any file which does not begin with the correct ZS magic is not a valid
+ZS file, and MUST be rejected by ZS file readers. Files with the
+``ZStoBe`` magic are not valid ZS files. However, polite ZS readers
+SHOULD generally check for the ``ZStoBe`` magic, and if encountered,
 provide an informative error message while rejecting the file.
 
 
@@ -220,10 +231,9 @@ The header contains the following fields, in order:
   in this ZS file; the same thing you'd get from ``ls -l`` or
   similar.
 
-   .. warning:: To guarantee data integrity, it is important for
-      readers to validate the file length field; our CRC checks alone
-      cannot detect file truncation if it happens to coincide with a
-      block boundary.
+   .. warning:: To guarantee data integrity, readers MUST validate the
+      file length field; our CRC checks alone cannot detect file
+      truncation if it happens to coincide with a block boundary.
 
 * SHA-256 of data (32 bytes): The SHA-256 hash of the stream one would
   get by extracting all data block payloads and concatenating
@@ -260,20 +270,23 @@ The header contains the following fields, in order:
     reduces the requirements on readers -- e.g., it guarantees that
     the XZ Embedded edition will always be sufficient.
 
+    .. warning:: LZMA2 SUPPORT IS EXPERIMENTAL IT WILL CHANGE I am
+       just too lazy to update the docs at the moment.
+
 * Metadata length (``u64le``): The length of the next field:
 
 * Metadata (UTF-8 encoded JSON): This field allows arbitrary metadata
   to be attached to a ZS file. The only restriction is that the
-  encoded value must be what JSON calls an "object" (also known as a
+  encoded value MUST be what JSON calls an "object" (also known as a
   dict, hash table, etc. -- basically, the outermost characters have
   to be ``{}``). But this object can contain arbitrarily complex
   values (though we recommend restricting yourself to strings for the
   keys). See :ref:`metadata-conventions`.
 
-* <extensions> (??): Compliant readers should ignore any data
-  occurring between the end of the metadata field and the end of the
-  header (as defined by the header length field). This space may be
-  used in the future to add backwards-compatible extensions to the ZS
+* <extensions> (??): Compliant readers MUST ignore any data occurring
+  between the end of the metadata field and the end of the header (as
+  defined by the header length field). This space may be used in the
+  future to add backwards-compatible extensions to the ZS
   format. (Backwards-incompatible extensions, of course, will include
   a change to the magic number.)
 
@@ -293,7 +306,7 @@ Blocks themselves all have the same format:
 * Level (``u8``): A single byte encoding the "level" of this
   block. Data blocks are level 0. Index blocks can have any level
   between 1 and 63 (inclusive). Other levels are reserved for future
-  backwards-compatible extensions; compliant readers must silently
+  backwards-compatible extensions; compliant readers MUST silently
   ignore any block with its level field set to 64 or higher.
 
 * Compressed payload (arbitrary data): The rest of the block after the
@@ -326,7 +339,7 @@ form:
 
 Then this is repeated as many times as you want.
 
-Every data block must contain at least one record.
+Every data block payload MUST contain at least one record.
 
 Index block payload
 '''''''''''''''''''
@@ -353,7 +366,7 @@ Each index payload entry has the form:
 
 Then this is repeated as many times as you want.
 
-Every key block must contain at least one entry.
+Every index block payload MUST contain at least one entry.
 
 Key invariants
 --------------
@@ -363,26 +376,26 @@ comparisons on raw byte values, as returned by ``memcmp()``.
 
 We require:
 
-* The records in each data block payload must be listed in sorted order.
+* The records in each data block payload MUST be listed in sorted order.
 
 * If data block A occurs earlier in the file (at a lower offset) than
-  data block B, then all records in A must be less-than-or-equal-to
-  all records in B.
+  data block B, then all records in A are REQUIRED to be
+  less-than-or-equal-to all records in B.
 
-* Every block, except for the root block, is referenced by exactly one
-  index block.
+* Every block, except for the root block, MUST be referenced by
+  exactly one index block.
 
-* An index block of level :math:`n` must only reference blocks of
+* An index block of level :math:`n` MUST only reference blocks of
   level :math:`n - 1`. (Data blocks are considered to have level 0.)
 
-* The keys in each index block payload must occur in sorted order.
+* The keys in each index block payload MUST occur in sorted order.
 
 * To every block, we assign a span of records as follows: data blocks
   span the records they contain. Index blocks span all the records
   that are spanned by the blocks that they point to
   (recursively). Given this definition, we can state the key invariant
-  for index blocks: every index key must be less-than-or-equal-to the
-  *first* record which is spanned by the pointed-to block, and must be
+  for index blocks: every index key MUST be less-than-or-equal-to the
+  *first* record which is spanned by the pointed-to block, and MUST be
   greater-than-or-equal-to all records which come before this record.
 
   .. note:: According to this definition, it is always legal to simply
@@ -402,5 +415,5 @@ blocks, making strict inequalities impossible to guarantee.
 Notice also that there is no requirement about where index blocks
 occur in the file, though in general each index will occur after the
 blocks it points to, because unless you are very clever you can't
-write an index block until you know the pointed-to blocks' disk
-offsets.
+write an index block until after you have written the pointed-to
+blocks and recorded their disk offsets.
