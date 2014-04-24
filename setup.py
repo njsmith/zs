@@ -27,8 +27,9 @@ if USE_CYTHON:
     ext_modules = cythonize(ext_modules)
 
 extra_requires = []
-if sys.version_info[0] < 3:
-    extra_requires += ["backports.lzma"]
+# Remove this temporarily so the RTD build will work
+# if sys.version_info[0] < 3:
+#     extra_requires += ["backports.lzma"]
 
 # defines __version__
 exec(open("zs/version.py").read())
