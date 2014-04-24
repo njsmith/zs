@@ -1,5 +1,5 @@
-Logistics
-=========
+Project logistics
+=================
 
 Documentation:
   http://zs.readthedocs.org/
@@ -14,6 +14,7 @@ Dependencies:
     * six
     * requests
     * docopt
+    * (Python 2 only) backports.lzma
 
 Developer dependencies (only needed for hacking on source):
   * Cython: needed to build from checkout
@@ -24,7 +25,8 @@ Developer dependencies (only needed for hacking on source):
 Install:
   ``pip install zs``
 
-  (Or, for traditionalists: ``python setup.py install``)
+  (Or, for traditionalists: unpack source, install prerequisites, and
+  then ``python setup.py install``)
 
 Code and bug tracker:
   https://github.com/njsmith/zs
