@@ -176,9 +176,10 @@ def test_make():
         # some work to do), that's large enough for things like the bz2 window
         # size to make a difference.
         r = random.Random(0)
-        scrambled_letters = b"".join(r.sample(b"abcdefghijklmnopqrstuvwxyz", 26))
+        scrambled_letters = "".join(r.sample("abcdefghijklmnopqrstuvwxyz", 26))
+        scrambled_letters = scrambled_letters.encode("ascii")
         pieces = []
-        for i in xrange(200000):
+        for i in range(200000):
             low = r.randrange(25)
             high = r.randrange(low, 26)
             pieces.append(scrambled_letters[low:high])
