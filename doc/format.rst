@@ -3,10 +3,11 @@
 On-disk layout of ZS files
 ===========================
 
-This page provides a complete specification of the ZS file format,
-along with rationale for specific design choices. It should be read by
-anyone who plans to implement a new reader or writer for the
-format, or is just interested in how things work under the covers.
+This page provides a complete specification of version **0.9** of the ZS
+file format, along with rationale for specific design choices. It
+should be read by anyone who plans to implement a new reader or writer
+for the format, or is just interested in how things work under the
+covers.
 
 Overview
 --------
@@ -417,3 +418,12 @@ occur in the file, though in general each index will occur after the
 blocks it points to, because unless you are very clever you can't
 write an index block until after you have written the pointed-to
 blocks and recorded their disk offsets.
+
+
+Specification history
+---------------------
+
+.. Also update the first line of this file whenever we add stuff to
+   the format.
+
+* Version 0.9: First public release.

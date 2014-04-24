@@ -4,4 +4,3 @@ docopt
 sphinxcontrib-programoutput
 Cython
 ipython
-backports.lzma

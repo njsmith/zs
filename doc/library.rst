@@ -1,5 +1,5 @@
-The ``zs`` Python package
-==========================
+The ``zs`` library for Python
+=============================
 
 .. module:: zs
 
@@ -18,16 +18,17 @@ we can write:
    for record in z:
        print(record)
 
-   # Notice that on Python 3.x, we must pass a byte string.
-   # (On Python 2.x, a regular string will do.)
+   # Notice that on Python 3.x, we must pass a byte string, and we get
+   # byte strings back.
+   # (On Python 2.x, byte strings are the same as regular strings.)
    for record in z.search(prefix=b"not done extensive testing\t"):
-       print(record)
+       print(record.decode("utf-8"))
 
    for record in z.search(prefix=b"not done extensive "):
-       print(record)
+       print(record.decode("utf-8"))
 
    for record in z.search(start=b"not done ext", stop=b"not done fast"):
-       print(record)
+       print(record.decode("utf-8"))
 
 Error reporting
 ---------------

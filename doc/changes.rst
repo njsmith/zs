@@ -1,5 +1,5 @@
-History of changes
-==================
+Release history
+===============
 
 .. currentmodule:: zs
 

@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-ZS: a file format for storing compressed sets
-=============================================
+ZS: a file format for compressed sets
+=====================================
 
 ZS is a simple, read-only, binary file format designed for
 distributing, querying, and archiving arbitarily large data sets (up
@@ -24,7 +24,7 @@ these traditional formats:
   comes to more than 9 terabytes (and would be even more if loaded
   into a database). The same data in a ZS file with the default
   settings (bzip2 compression) takes just 0.8 terabytes -- more than
-  35% smaller than the current distribution format, and 10x smaller
+  35% smaller than the current distribution format, and 11x smaller
   than the raw data.
 
 .. Benchmarks in next paragraph:
@@ -48,27 +48,27 @@ these traditional formats:
       ^C
 
 * Nonetheless, ZS files are **fast**: ZS files allow decompression to
-  be trivially parallelized over multiple CPUs, which is not possible
-  with traditional compression formats like gzip. And this is
-  important, because decompression is an inherently slow
+  be parallelized over multiple CPUs, which is not possible with
+  traditional compression formats like gzip. And this is important,
+  because decompression is a slow and inherently serial
   operation. Using a fast compute server for measurements, we found
-  that gunzip can spit out data at ~180 MiB/s. Google distributes the
-  3-gram counts in many separate files; one of these, for example,
-  contains just the 3-grams that begin with the letters "th".  On our
-  compute server, decompressing just this one file takes more than 45
+  that gunzip can spit out 3-gram data at ~180 MiB/s. Google
+  distributes these counts in many separate files; one of these, for
+  example, contains just the 3-grams that begin with the letters "th".
+  On our compute server, decompressing just this one file takes 47
   minutes.
 
   Bzip2 decompression on its own is quite a bit slower than gunzip,
-  but with 8 CPUs and relatively crude parallelization in Python, the
-  same server can decompress our smaller ZS file at 210 MiB/s, and in
-  a careful implementation should scale nearly linearly with the
-  number of CPUs. And of course, we have the option of choosing many
-  different locations on the space/speed tradeoff curve: if we used
-  gzip compression in our ZS file, it'd be roughly the same size as
-  the current distribution format, but would decompress multiple times
-  faster; or with LZMA compression (which will probably become the ZS
-  default soon), decompression will be roughly twice as fast as for
-  bzip2, and produce even smaller files.
+  but with 8 CPUs and using Python's relatively crude parallelization
+  facilities, the same server can decompress our smaller ZS file at
+  210 MiB/s, and a careful implementation should scale nearly linearly
+  with the number of CPUs. And of course, we have the option of
+  choosing many different locations on the space/speed tradeoff curve:
+  if we used gzip compression in our ZS file, it'd be roughly the same
+  size as the current distribution format, but would decompress
+  multiple times faster; or with LZMA compression (which will probably
+  become the ZS default soon), decompression will be roughly twice as
+  fast as for bzip2, and produce even smaller files.
 
 .. Benchmarks in next paragraph:
 
@@ -91,18 +91,19 @@ these traditional formats:
   sets where the first column (or first several columns) are usually
   used for lookup. Using our example file, finding the "this is fun"
   entry takes 5 disk seeks and ~20 milliseconds of CPU time --
-  something like 80 ms all told. (And hot cache performance is even
-  better. The answer, by the way, is 27 books.) When this data is
-  stored as gzipped text, then only way to locate an individual
-  record, or span of similar records, is start decompressing the file
-  from the beginning and wait until the records we want happen to
-  scroll by, which in this case -- as noted above -- could take more
-  than 45 minutes. Here, using ZS is ~35,000x faster.
+  something like 80 ms all told. (And hot cache performance -- e.g.,
+  when performing repeated queries in the same file -- is even
+  better. The answer is 27 books.) When this data is stored as gzipped
+  text, then only way to locate an individual record, or span of
+  similar records, is start decompressing the file from the beginning
+  and wait until the records we want happen to scroll by, which in
+  this case -- as noted above -- could take more than 45
+  minutes. Here, using ZS is ~35,000x faster.
 
 * ZS files contain **rich metadata**: In addition to the raw data
-  records, every ZS file contains a set of structured metadata
-  (specifically, an arbitrary `JSON <http://json.org>`_ document). You
-  can use this to store information about the record format (e.g.,
+  records, every ZS file contains a set of structured metadata in the
+  form of an arbitrary `JSON <http://json.org>`_ document. You can use
+  this to store information about this file's record format (e.g.,
   column names), notes on data collection or preprocessing steps,
   recommended citation information, or whatever you like, and be
   confident that it will follow your data where-ever it goes.
@@ -117,7 +118,7 @@ these traditional formats:
 
   Try it yourself:
 
-  .. command-output:: zs dump --prefix="this is\\t" http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-2gram.zs
+  .. command-output:: zs dump --prefix='this is\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-2gram.zs
      :shell:
      :ellipsis: 1,-1
 
@@ -142,7 +143,7 @@ these traditional formats:
   choice.
 
 * Relying on the ZS format creates **minimal risk**: The ZS file
-  format is simple and :ref:`fully documented <format>`_; an average
+  format is simple and :ref:`fully documented <format>`; an average
   programmer with access to standard libraries could write a working
   decompressor in a few hours. The reference implementation is
   BSD-licensed, undergoes exhaustive automated testing (~99% coverage)
