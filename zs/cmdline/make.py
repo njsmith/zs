@@ -74,14 +74,15 @@ Output file options:
   -z COMPRESS-LEVEL, --compress-level=COMPRESS-LEVEL
                              Degree of compression to use. Interpretation
                              depends on the codec in use:
-                               deflate: An integer between 1 and 9. (Default: 6)
+                               deflate: An integer between 1 and 9.
+                                 (Default: 6)
                                bz2: An integer between 1 and 9. (Default: 9)
                                lzma: One of the strings 0, 0e, 1, or 1e.
                                  Note that 0 and 1 are several times faster
                                  than 0e and 1e, though at some cost in
                                  compression ratio. Note also that there is no
-                                 benefit to using 1 unless you also increase
-                                 --approx-block-size. (Default: 0e)
+                                 benefit to using 1 or 1e unless you also
+                                 increase --approx-block-size. (Default: 0e)
   --no-default-metadata      By default, 'zs make' adds an extra "build-info"
                              key to the metadata, recording the time, host,
                              and user who created the file. This option

@@ -1,4 +1,4 @@
-Where to find ZS format datasets
+Publically available ZS datasets
 ================================
 
 [XX expand]
