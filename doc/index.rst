@@ -171,7 +171,7 @@ Contents:
 
    library.rst
 
-   metadata.rst
+   conventions.rst
 
    datasets.rst
 
