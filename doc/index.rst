@@ -114,7 +114,11 @@ these traditional formats:
   smaller than the full file (e.g., all 3-grams that begin "this
   is"). With ZS, you don't have to actually download the full 0.8
   terabytes of data; given a URL to the file, the ZS tools can
-  efficiently locate and fetch just the parts of the file you need.
+  efficiently locate and fetch just the parts of the file you need. Of
+  course if you need to make a large number of queries then it'll be
+  faster (and kinder to whoever's hosting the file!) to just download
+  it. But there's no point in throwing around gigabytes of data to
+  answer a kilobyte question.
 
   Try it yourself:
 
