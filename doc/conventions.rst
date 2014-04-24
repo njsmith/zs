@@ -20,7 +20,8 @@ Metadata
     "build-info": {
         "host": "morel.ucsd.edu",
         "user": "njsmith",
-        "time": "2014-04-21T23:56:47.225267Z"
+        "time": "2014-04-21T23:56:47.225267Z",
+        "version": "zs 0.0.0-dev"
     },
     "corpus": "google-books-eng-us-all-20120701",
     "subset": "2gram",

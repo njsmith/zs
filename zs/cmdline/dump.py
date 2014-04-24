@@ -12,15 +12,15 @@ def command_dump(opts):
 Usage:
   zs dump <zs_file>
   zs dump [--start=START] [--stop=STOP] [--prefix=PREFIX]
-           [--terminator=TERMINATOR | --length-prefixed=TYPE]
-           [-j PARALLELISM]
-           [-o FILE]
-           [--] <zs_file>
+          [--terminator=TERMINATOR | --length-prefixed=TYPE]
+          [-j PARALLELISM]
+          [-o FILE]
+          [--] <zs_file>
   zs dump --help
 
 Arguments:
   <zs_file>  Path or URL pointing to a .zs file. An argument beginning with
-              the four characters "http" will be treated as a URL.
+             the four characters "http" will be treated as a URL.
 
 Selection options:
   --start=START            Output only records which are >= START.
@@ -32,7 +32,7 @@ Selection options:
 
 Processing options:
   -j PARALLELISM           The number of CPUs to use for decompression.
-                           [default: all cpus]
+                           [default: guess]
 Output options:
   -o FILE, --output=FILE   Output to the given file, or "-" for stdout.
                            [default: -]

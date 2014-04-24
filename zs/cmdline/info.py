@@ -18,7 +18,7 @@ Usage:
 
 Arguments:
   <zs_file>  Path or URL pointing to a .zs file. An argument beginning with
-              the four characters "http" will be treated as a URL.
+             the four characters "http" will be treated as a URL.
 
 Options:
   -m, --metadata-only   Output only the file's metadata, not any general
@@ -27,7 +27,7 @@ Options:
 Output will be valid JSON.
 """
 
-    with open_zs(opts) as z:
+    with open_zs(opts, parallelism=0) as z:
         if opts["--metadata-only"]:
             info = z.metadata
         else:

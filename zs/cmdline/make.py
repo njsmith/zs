@@ -14,14 +14,14 @@ def command_make(opts):
 Usage:
   zs make <metadata> <input_file> <new_zs_file>
   zs make [--terminator TERMINATOR | --length-prefixed=TYPE]
-           [-j PARALLELISM]
-           [--no-spinner]
-           [--branching-factor=FACTOR]
-           [--approx-block-size=SIZE]
-           [--codec=CODEC] [-z COMPRESS-LEVEL]
-           [--no-default-metadata]
-           [--]
-           <metadata> <input_file> <new_zs_file>
+          [-j PARALLELISM]
+          [--no-spinner]
+          [--branching-factor=FACTOR]
+          [--approx-block-size=SIZE]
+          [--codec=CODEC] [-z COMPRESS-LEVEL]
+          [--no-default-metadata]
+          [--]
+          <metadata> <input_file> <new_zs_file>
   zs make --help
 
 Arguments:
@@ -42,7 +42,7 @@ Arguments:
                     cat myfile.txt | env LC_ALL=C sort | zs make - myfile.zs
 
   <new_zs_file>  The file to create. Conventionally uses the file extension
-                  ".zs".
+                 ".zs".
 
 Input file options:
   --terminator=TERMINATOR    Treat the input file as containing a series of
@@ -61,7 +61,7 @@ Input file options:
 
 Processing options:
   -j PARALLELISM             The number of CPUs to use for compression.
-                             [default: all cpus]
+                             [default: guess]
   --no-spinner               Disable the progress meter.
 
 Output file options:
@@ -85,8 +85,8 @@ Output file options:
                                  increase --approx-block-size. (Default: 0e)
   --no-default-metadata      By default, 'zs make' adds an extra "build-info"
                              key to the metadata, recording the time, host,
-                             and user who created the file. This option
-                             disables this behaviour.
+                             user who created the file, and zs library
+                             version. This option disables this behaviour.
 
     """
 

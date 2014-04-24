@@ -6,8 +6,7 @@ import sys
 
 from zs import ZS
 
-def open_zs(opts):
-    kwargs = {}
+def open_zs(opts, **kwargs):
     zs_path_or_url = opts["<zs_file>"]
     if zs_path_or_url.startswith("http"):
         kwargs["url"] = zs_path_or_url

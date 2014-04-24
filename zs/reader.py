@@ -217,7 +217,7 @@ class ZS(object):
       tasks. ``parallelism=1`` means to spawn 1 worker process; if you want to
       perform decompression and other such tasks in serial in your main
       thread, then use ``parallelism=0``. The default of
-      ``parallelism="auto"`` means to spawn one worker process per available
+      ``parallelism="guess"`` means to spawn one worker process per available
       CPU.
 
     :arg index_block_cache: The number of index blocks to keep cached in
@@ -233,7 +233,7 @@ class ZS(object):
 
     """
     def __init__(self, path=None, url=None,
-                 parallelism="auto", index_block_cache=32):
+                 parallelism="guess", index_block_cache=32):
         if path is not None and url is None:
             self._transport = FileTransport(path)
         elif path is None and url is not None:
@@ -264,12 +264,12 @@ class ZS(object):
         if not isinstance(self.metadata, dict):
             raise ZSCorrupt("bad metadata")
 
-        if parallelism == "auto":
+        if parallelism == "guess":
             # XX put an upper bound on this
             parallelism = multiprocessing.cpu_count()
         self._parallelism = parallelism
         if self._parallelism < 0:
-            raise ValueError("parallelism must be >= 0 or \"auto\"")
+            raise ValueError("parallelism must be >= 0 or \"guess\"")
         if parallelism == 0:
             self._executor = SerialExecutor()
         else:

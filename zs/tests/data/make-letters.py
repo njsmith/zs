@@ -29,6 +29,7 @@ def do_write(codec, branching_factor, approx_block_size):
                                  u"user": u"test-user",
                                  u"host": u"test-host",
                                  u"time": u"2000-01-01T00:00:00.000000Z",
+                                 u"version": u"zs test",
                              },
                          },
                    branching_factor=branching_factor,

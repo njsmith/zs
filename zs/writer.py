@@ -17,6 +17,7 @@ from datetime import datetime
 
 import six
 
+import zs
 from zs.common import (ZSError,
                        MAGIC,
                        INCOMPLETE_MAGIC,
@@ -138,12 +139,12 @@ def errors_close(obj):
 
 class ZSWriter(object):
     def __init__(self, path, metadata, branching_factor,
-                 parallelism="auto", codec="bz2", codec_kwargs={},
+                 parallelism="guess", codec="bz2", codec_kwargs={},
                  show_spinner=True, include_default_metadata=True):
         """Create a ZSWriter object.
 
         .. note:: In many cases it'll be easier to just use the command line
-          'zs make' tool, which is a wrapper around this class.
+           'zs make' tool, which is a wrapper around this class.
 
         :arg path: File to write to. Must not already exist.
 
@@ -154,7 +155,7 @@ class ZSWriter(object):
           block. We use a simple greedy packing strategy, where we fill up
           index blocks until they reach this limit.
 
-        :arg parallelism: The number of CPUs to use for compression, or "auto"
+        :arg parallelism: The number of CPUs to use for compression, or "guess"
           to auto-detect. Must be >= 1.
 
         :arg codec: The compression method to use.
@@ -205,11 +206,12 @@ class ZSWriter(object):
             build_info = {"user": getpass.getuser(),
                           "host": socket.getfqdn(),
                           "time": datetime.utcnow().isoformat() + "Z",
+                          "version": "zs %s" % (zs.__version__,),
                           }
             self.metadata.setdefault("build-info", build_info)
         self.branching_factor = branching_factor
         self._show_spinner = show_spinner
-        if parallelism == "auto":
+        if parallelism == "guess":
             # XX put an upper bound on this
             parallelism = multiprocessing.cpu_count()
         self._parallelism = parallelism

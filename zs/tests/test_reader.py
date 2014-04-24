@@ -48,6 +48,7 @@ def check_letters_zs(z, codec_shorthand):
             u"user": u"test-user",
             u"host": u"test-host",
             u"time": u"2000-01-01T00:00:00.000000Z",
+            u"version": u"zs test",
             },
         }
     assert isinstance(z.root_index_level, integer_types)
@@ -121,7 +122,7 @@ def check_letters_zs(z, codec_shorthand):
 def test_zs():
     for codec in codec_shorthands:
         p = test_data_path("letters-%s.zs" % (codec,))
-        for parallelism in [0, 2, "auto"]:
+        for parallelism in [0, 2, "guess"]:
             with ZS(path=p, parallelism=parallelism) as z:
                 check_letters_zs(z, codec)
 
@@ -200,6 +201,7 @@ def test_big_headers():
                 u"user": u"test-user",
                 u"host": u"test-host",
                 u"time": u"2000-01-01T00:00:00.000000Z",
+                u"version": u"zs test",
                 },
             }
         assert list(z) == letters_records

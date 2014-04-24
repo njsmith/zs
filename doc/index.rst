@@ -124,7 +124,7 @@ these traditional formats:
 
   .. command-output:: zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
      :shell:
-     :ellipsis: 1,-1
+     :ellipsis: 2,-2
 
 * ZS files are **ever-vigilant**: Computer hardware is simply not
   reliable, especially on scales of years and terabytes. I've dealt

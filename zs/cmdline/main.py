@@ -112,8 +112,8 @@ For details, use 'zs <subcommand> --help'.
 
     # special opts
     if "-j" in subopts:
-        if subopts["-j"] == "all cpus":
-            subopts["__j__"] = "auto"
+        if subopts["-j"] == "guess":
+            subopts["__j__"] = "guess"
         else:
             try:
                 subopts["__j__"] = int(subopts["-j"])

@@ -15,11 +15,11 @@ Usage:
 
 Arguments:
   <zs_file>  Path or URL pointing to a .zs file. An argument beginning with
-              the four characters "http" will be treated as a URL.
+             the four characters "http" will be treated as a URL.
 
 Options:
   -j PARALLELISM             The number of CPUs to use for decompression.
-                             [default: all cpus]
+                             [default: guess]
 """
     #import pdb; pdb.set_trace()
     with open_zs(opts) as z:
