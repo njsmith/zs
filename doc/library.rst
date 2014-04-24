@@ -16,9 +16,9 @@ we can write:
    z = ZS("example/tiny-4grams.zs")
 
    for record in z:
-       print(record)
+       print(record.decode("utf-8"))
 
-   # Notice that on Python 3.x, we must pass a byte string, and we get
+   # Notice that on Python 3.x, we search using byte strings, and we get
    # byte strings back.
    # (On Python 2.x, byte strings are the same as regular strings.)
    for record in z.search(prefix=b"not done extensive testing\t"):
