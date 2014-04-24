@@ -118,12 +118,9 @@ these traditional formats:
 
   Try it yourself:
 
-  .. command-output:: zs dump --prefix='this is\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-2gram.zs
+  .. command-output:: zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
      :shell:
      :ellipsis: 1,-1
-
-  [XX: replace this with the 3gram example as soon as the 3gram file
-  finishes transferring to the web server]
 
 * ZS files are **ever-vigilant**: Computer hardware is simply not
   reliable, especially on scales of years and terabytes. I've dealt
