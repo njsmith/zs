@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-ZS -- storing compressed sets
-=============================
+ZS: a file format for storing compressed sets
+=============================================
 
 ZS is a simple, read-only, binary file format designed for
 distributing, querying, and archiving arbitarily large data sets (up
@@ -21,43 +21,91 @@ these traditional formats:
   <http://storage.googleapis.com/books/ngrams/books/datasetsv2.html>`_
   are distributed as a set of gzipped text files in tab-separated
   format, and take 1.3 terabytes of space. Uncompressed, this data set
-  comes to more than 9 terabytes. The same data in a ZS file with the
-  default settings takes just 0.8 terabytes -- more than 35% smaller
-  than the current distribution format, and 10x smaller than the raw
-  data.
+  comes to more than 9 terabytes (and would be even more if loaded
+  into a database). The same data in a ZS file with the default
+  settings (bzip2 compression) takes just 0.8 terabytes -- more than
+  35% smaller than the current distribution format, and 10x smaller
+  than the raw data.
 
-* ZS files are **fast**: Decompression of ZS files can be parallelized
-  over multiple CPUs, which is not possible with traditional
-  compression formats like gzip. One of the files distributed by
-  Google contains specifically the 3-grams which begin with the
-  letters "th". Decompressing this file alone takes 30-40 minutes on a
-  fast computer. But with the same ZS file described above, the speed
-  is limited only by available processor power.
+.. Benchmarks in next paragraph:
 
-* ZS files are **really, REALLY fast**: Suppose we want to know how
-  many times the phrase "this is fun" was used in a Google-scanned
-  book published in the USA in 1955. ZS files have a limited indexing
+   On hericium.ucsd.edu:
+
+      # raw gunzip
+      njsmith@hericium:/local/scratch/njs/google_books_ngrams_v2$ gunzip -c googlebooks-eng-us-all-3gram-20120701-th.gz  | pv -rabt > /dev/null
+      506GB 0:47:34 [ 181MB/s] [ 181MB/s]
+
+      # ZS dump bz2, 32 CPUs
+      njsmith@hericium:/local/scratch/njs/google_books_ngrams_v2$ zs dump google-books-eng-us-all-2012070
+      1-3gram.zs --prefix="th" | pv -rabt >/dev/null
+      25.6GB 0:01:25 [ 291MB/s] [ 308MB/s]]
+      ^C
+
+      # ZS dump bz2, 8 CPUs (note -j7 b/c this does not count the main thread)
+      njsmith@hericium:/local/scratch/njs/google_books_ngrams_v2$ zs dump -j7 google-books-eng-us-all-201
+      20701-3gram.zs --prefix="th" | pv -rabt >/dev/null
+      25.9GB 0:02:11 [ 239MB/s] [ 210MB/s]
+      ^C
+
+* Nonetheless, ZS files are **fast**: ZS files allow decompression to
+  be trivially parallelized over multiple CPUs, which is not possible
+  with traditional compression formats like gzip. And this is
+  important, because decompression is an inherently slow
+  operation. Using a fast compute server for measurements, we found
+  that gunzip can spit out data at ~180 MiB/s. Google distributes the
+  3-gram counts in many separate files; one of these, for example,
+  contains just the 3-grams that begin with the letters "th".  On our
+  compute server, decompressing just this one file takes more than 45
+  minutes.
+
+  Bzip2 decompression on its own is quite a bit slower than gunzip,
+  but with 8 CPUs and relatively crude parallelization in Python, the
+  same server can decompress our smaller ZS file at 210 MiB/s, and in
+  a careful implementation should scale nearly linearly with the
+  number of CPUs. And of course, we have the option of choosing many
+  different locations on the space/speed tradeoff curve: if we used
+  gzip compression in our ZS file, it'd be roughly the same size as
+  the current distribution format, but would decompress multiple times
+  faster; or with LZMA compression (which will probably become the ZS
+  default soon), decompression will be roughly twice as fast as for
+  bzip2, and produce even smaller files.
+
+.. Benchmarks in next paragraph:
+
+   On hericium.ucsd.edu, using file with bz2 codec:
+
+       %timeit list(zs.ZS("google-books-eng-us-all-20120701-3gram.zs", parallelism=0).search(prefix=b"this is fun\t1955\t"))
+       10 loops, best of 3: 21.6 ms per loop
+
+   "5 disk seeks" = 'zs info' says root level is 3
+
+   Speedup:
+
+* In fact, ZS files are **really, REALLY fast**: Suppose we want to
+  know how many different Google-scanned books published in the USA in
+  1955 used the phrase "this is fun". ZS files have a limited indexing
   ability that lets you quickly locate any arbitrary span of records
   that fall within a given sorted range, or share a certain textual
   prefix. This isn't as nice as a full-fledged database system that
   can query on any column, but it can be extremely useful for data
   sets where the first column (or first several columns) are usually
-  used for lookup. In our example file, finding the "this is fun"
-  entry takes XX disk seeks and less than XX milliseconds of CPU time
-  -- call it XX ms all told. (Turns out it was used 27 times.)  When
-  this data is stored as gzipped text, then only way to locate an
-  individual record, or span of similar records, is start
-  decompressing the file from the beginning and wait until the records
-  we want happen to scroll by, which in this case -- as noted above --
-  can take anywhere up to 40 minutes. Here, ZS is >XX times faster.
+  used for lookup. Using our example file, finding the "this is fun"
+  entry takes 5 disk seeks and ~20 milliseconds of CPU time --
+  something like 80 ms all told. (And hot cache performance is even
+  better. The answer, by the way, is 27 books.) When this data is
+  stored as gzipped text, then only way to locate an individual
+  record, or span of similar records, is start decompressing the file
+  from the beginning and wait until the records we want happen to
+  scroll by, which in this case -- as noted above -- could take more
+  than 45 minutes. Here, using ZS is ~35,000x faster.
 
 * ZS files contain **rich metadata**: In addition to the raw data
   records, every ZS file contains a set of structured metadata
   (specifically, an arbitrary `JSON <http://json.org>`_ document). You
-  can use this to record column names, notes on data collection or
-  preprocessing steps, recommended citation information, or whatever
-  you like, and be confident that it will follow your data whereever
-  it goes.
+  can use this to store information about the record format (e.g.,
+  column names), notes on data collection or preprocessing steps,
+  recommended citation information, or whatever you like, and be
+  confident that it will follow your data where-ever it goes.
 
 * ZS files are **network friendly**: Suppose you know you just want to
   look up a few individual records that are buried inside that 0.8
@@ -67,30 +115,41 @@ these traditional formats:
   terabytes of data; given a URL to the file, the ZS tools can
   efficiently locate and fetch just the parts of the file you need.
 
+  Try it yourself:
+
+  .. command-output:: zs dump --prefix="this is\\t" http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-2gram.zs
+     :shell:
+     :ellipsis: 1,-1
+
+  [XX: replace this with the 3gram example as soon as the 3gram file
+  finishes transferring to the web server]
+
 * ZS files are **ever-vigilant**: Computer hardware is simply not
-  reliable, especially on scales of years and terabytes. We've seen
-  RAID cards that would occasionally flip a single bit in the data
-  that was being read from disk. How confident are you that this won't
-  be a bit that makes a difference in your analysis? Standard text
-  files provide no mechanism for detecting data corruption; gzip
-  provides some protection, but it's only guaranteed to work if you
-  read the entire file from start to finish, every time, and remember
-  to check the error code. ZS, by contrast, protects every bit of data
-  with 64-bit CRC checksums, and the software we distribute will never
-  show you any data that hasn't been double-checked for
-  correctness. (Fortunately, this checking is extremely fast; its cost
-  is included in all the times quoted above). If it matters to you
-  whether your analysis gets the right answer, then ZS is a good
+  reliable, especially on scales of years and terabytes. I've dealt
+  with RAID cards that would occasionally flip a single bit in the
+  data that was being read from disk. How confident are you that this
+  won't be a bit that changes your results? Standard text files
+  provide no mechanism for detecting data corruption. Gzip and other
+  traditional compression formats provide some protection, but it's
+  only guaranteed to work if you read the entire file from start to
+  finish and then remember to check the error code at the end, every
+  time. ZS, by contrast, protects every bit of data with 64-bit CRC
+  checksums, and the software we distribute will never show you any
+  data that hasn't first been double-checked for
+  correctness. (Fortunately, the cost of this checking is negligible;
+  all the times quoted above include these checks). If it matters to
+  you whether your analysis gets the right answer, then ZS is a good
   choice.
 
 * Relying on the ZS format creates **minimal risk**: The ZS file
   format is simple and :ref:`fully documented <format>`_; an average
-  programmer with access to standard libraries could write a basic
+  programmer with access to standard libraries could write a working
   decompressor in a few hours. The reference implementation is
   BSD-licensed, undergoes exhaustive automated testing (~99% coverage)
-  after every checkin, and includes a complete file format validator,
-  so you can confirm that your files match the spec and be confident
-  that they will be readable by any compliant implementation.
+  after every checkin, and includes an exhaustive file format
+  validator, so you can confirm that your files match the spec and be
+  confident that they will be readable by any compliant
+  implementation.
 
 * ZS files have a name **composed entirely of sibilants**: How many
   file formats can say *that*?
@@ -114,7 +173,11 @@ Contents:
 
    metadata.rst
 
+   datasets.rst
+
    format.rst
+
+   changes.rst
 
 Indices and tables
 ==================

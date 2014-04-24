@@ -177,10 +177,10 @@ written, leaving behind a partial, corrupt ZS file. Because ZS is
 designed as a reliable archival format we would like to avoid the
 possibility of confusing a corrupt file with a correct one, and
 because writing ZS files can be slow, after a crash we would like to
-be able to reliably determine whether the writing operation had
-completed, to know whether we can trust the file left
-behind. Therefore we also define a second magic number to be used
-specifically for partial ZS files::
+be able to reliably determine whether the writing operation completed,
+and whether we can trust the file left behind. Therefore we also
+define a second magic number to be used specifically for partial ZS
+files::
 
   ab 5a 53 74 6f 42 65 01   # Bad magic
       Z  S  t  o  B  e
