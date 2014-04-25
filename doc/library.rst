@@ -48,16 +48,22 @@ Reading ZS files is accomplished by instantiating an object of type
 
 .. autoclass:: ZS
 
-   .. rubric:: Basic searches
+Basic searches
+''''''''''''''
+
+.. class:: ZS
 
    .. automethod:: search
 
    .. automethod:: __iter__
 
-   .. rubric:: Metadata access
+File attributes and metadata
+''''''''''''''''''''''''''''
 
-   This class provides a number of read-only attributes that give
-   general information about the ZS file:
+.. class:: ZS
+
+   :class:`ZS` objects provides a number of read-only attributes
+   that give general information about the ZS file:
 
    .. attribute:: metadata
       :annotation:
@@ -102,13 +108,23 @@ Reading ZS files is accomplished by instantiating an object of type
    .. autoattribute:: root_index_level
       :annotation:
 
-   .. rubric:: Fast bulk operations for experts
+Fast bulk operations
+''''''''''''''''''''
+
+If you want to perform some computation on many records (e.g., all the
+records in your file), then these functions are the most efficient way
+to do that.
+
+.. class:: ZS
 
    .. automethod:: block_map
 
    .. automethod:: block_exec
 
-   .. rubric:: High-level operations
+High-level operations
+'''''''''''''''''''''
+
+.. class:: ZS
 
    .. automethod:: dump
 

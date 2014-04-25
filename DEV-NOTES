@@ -10,11 +10,15 @@ nosetests --all-modules --with-cov --cov-conf .coveragerc --cov-report term-miss
 * windows compilation
 https://github.com/cython/cython/wiki/64BitCythonExtensionsOnWindows
 https://matthew-brett.github.io/pydagogue/python_msvc.html
+
 * Next
 
-** "guess"
-
 ** windows wheels?
+
+** once RTD is straightened out, and we have some real lzma test files
+make backports.lzma a proper requirement, and probably switch to lzma as our default
+
+** run a few benchmarks to see if we should cap parallelism, and/or tune block size
 
 * LZMA
 
@@ -45,7 +49,26 @@ maybe 512K -> 10 ms -> about the same as a disk seek?
 
 * Better parallelism
 
-since it seems that we spend a lot of time in IPC for a streaming reads, it's possible we should switch to threads instead of processes.
+** Solving the control-C problem (and friends) by writing a better process pool
+reader.py's process pool is terrible, esp. on py2
+
+- if you are using the command-line tools, control-C tends to just blow up
+- if you are in ipython, then control-C destroys your ZS object
+
+a better pool would be:
+- spawn our own processes with custom loops, a la writer.py
+- for these children, set SIGINT to SIG_IGN, so we just don't have to deal with it.
+- maybe have them poll the parent process occasionally to make sure that it's still alive. having the parent process unconditionally kill them on exit gets us a good part of the way, but can we do even better? heartbeats? keep a pipe around?
+  - some options of varying cleverness and portability: https://stackoverflow.com/questions/284325/how-to-make-child-process-die-after-parent-exits
+  - most reliable (but not quite mentioned there) seems to be to pass the parent's PID into the child, and then have the child poll on getppid().
+    easiest way to do this would be for each worker to spawn a thread that just does this and calls os.exit if the parent goes.
+  - windows approach: https://stackoverflow.com/a/12942797/1925449
+    http://msdn.microsoft.com/en-us/library/ms684161%28VS.85%29.aspx
+    requires win32api and some way to get a process handle for multiprocessing child
+- and if a worker just dies (which should never happen), then close the parent, because who knows what got lost and this should be a very unusual event. but we do need to watch for it when blocking on get() in the main thread.
+
+** A wackier alternative
+if we spend a lot of time in IPC for a streaming reads, it's possible we should switch to threads instead of processes.
 
 this wouldn't be too hard -- the trick would be to write a tiny circular queue in Cython, start threads using the standard Python APIs, and have all the threads execute a Cython loop that drops the GIL and then pulls char*'s off the queue and puts back decompressed char*'s.
 

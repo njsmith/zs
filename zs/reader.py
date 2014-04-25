@@ -199,6 +199,13 @@ def test_LRU():
     assert cache.lru_call(f, 2) == 4
     assert calls == [2, 3, 4, 5, 4, 2]
 
+    calls = []
+    null_cache = _LRU(0)
+    assert null_cache.lru_call(f, 2) == 4
+    assert null_cache.lru_call(f, 2) == 4
+    assert null_cache.lru_call(f, 3) == 9
+    assert calls == [2, 2, 3]
+
 class ZS(object):
     """Object representing a .zs file opened for reading.
 
@@ -227,14 +234,22 @@ class ZS(object):
 
     :arg index_block_cache: The number of index blocks to keep cached in
       memory. This speeds up repeated queries. Larger values provide better
-      caching, but take more memory. Usually you'll want this to at least be
-      as large as the depth of your .zs file's index tree, to ensure that the
-      root block stays cached.
+      caching, but take more memory. Make sure that this is at least
+      as large as your file's :attr:`root_index_level`, or else the cache will
+      be useless.
 
     This object can be used as a context manager, e.g.::
 
-        with ZS("./my/favorite.zs") as z:
+        with ZS("./my/favorite.zs") as zs_obj:
             ...
+
+    is equivalent to::
+
+        zs_obj = ZS("./my/favorite.zs")
+        try:
+            ...
+        finally:
+            zs_obj.close()
 
     """
     def __init__(self, path=None, url=None,
@@ -658,13 +673,14 @@ class ZS(object):
     def block_map(self, fn, start=None, stop=None, prefix=None,
                   args=(), kwargs={}):
         """Apply a given function -- in parallel -- to records matching a
-        given query. This function is lazy -- you have to iterate
+        given query. This function is lazy -- if you don't iterate over the
+        results, then the function might not be called on all of them.
 
         Using this method (or its friend, :meth:`block_exec`) is the
         best way to perform large bulk operations on ZS files.
 
-        The way to think about this is, first we find all records matching the
-        given query::
+        The way to think about how it works is, first we find all records
+        matching the given query::
 
             matches = zs_obj.search(start=start, stop=stop, prefix=prefix)
 
@@ -678,8 +694,8 @@ class ZS(object):
 
         But, there is a trick: in fact many copies of the function are run in
         parallel in different worker processes, and then the results are
-        passed back to the main process for you to collect. (Think "poor-man's
-        map-reduce".)
+        passed back to the main process for you to do whatever you want
+        with. (Think "poor-man's map-reduce".)
 
         This means that your ``fn``, ``args``, ``kwargs``, and return values
         must all be pickleable. In particular, ``fn`` probably has to either

@@ -8,8 +8,16 @@
 * update zs/version.py
 * make sure there are no uncommitted changes
 * clone a clean source directory
+* in clean clone: python setup.py sdist --formats=zip
+* test the sdist builds and passes tests (ideally in a clean venv,
+  e.g., no cython):
+     cd dist
+     virtualenv t
+     t/bin/pip install nose nose-progressive backports.lzma
+     t/bin/pip install zs-*.zip
+     t/bin/nosetests --all-modules zs
+* twine upload dist/*.zip
 * in original directory: git tag <version> && git push --tags
-* in clean clone: python setup.py sdist --formats=zip,gztar upload
 * Go to http://readthedocs.org/dashboard/zs/versions/, set the new
   version to build and update the default.
 * announce release on:

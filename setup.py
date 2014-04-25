@@ -8,9 +8,10 @@ else:
     # Don't depend on Cython in builds-from-sdist
     USE_CYTHON = False
 
-DESC = """ZS is a compressed, read-only file format for efficiently
-distributing, querying, and archiving arbitrarily large record-oriented
-datasets."""
+# Must be one line or PyPI will cut it off
+DESC = ("ZS is a compressed, read-only file format for efficiently "
+        "distributing, querying, and archiving arbitrarily large "
+        "record-oriented datasets.")
 
 LONG_DESC = open("README.rst").read()
 
