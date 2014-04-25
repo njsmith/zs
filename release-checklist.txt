@@ -1,5 +1,5 @@
 * docs:
-  * update doc/changes.rst
+  * update doc/changes.rst, doc/format.rst
   * make sure appropriate ..versionadded:: directives are present
   * make sure docs are up to date
   * check coverage

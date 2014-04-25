@@ -45,6 +45,7 @@ Dependencies:
     * six
     * requests
     * docopt
+    * (Python 2 only) backports.lzma
 
 Developer dependencies (only needed for hacking on source):
   * Cython: needed to build from checkout
