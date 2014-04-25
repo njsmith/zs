@@ -37,6 +37,10 @@ os.mkdir("example/scratch")
 shutil.copyfile("example/tiny-4grams.txt",
                 "example/scratch/tiny-4grams.txt")
 
+# And set the TIME variable to control the output format from 'time' (see
+# index.rst)
+os.environ["TIME"] = "\n%U user, %S system, %E total elapsed time"
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
