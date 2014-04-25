@@ -126,9 +126,11 @@ these traditional formats:
   download it. But there's no point in throwing around gigabytes of
   data to answer a kilobyte question.
 
-  Try it yourself:
+  If you have the ZS tools installed, you can try it right now. Here's
+  a live run from the readthedocs.org servers, which are nowhere near
+  UCSD:
 
-  .. sneaky hack: we set the TIME variable in conf.py to get nicer
+  .. sneaky hack: we set the TIME envvar in conf.py to get nicer
      output from the 'time' command called here
 
   .. command-output:: time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
