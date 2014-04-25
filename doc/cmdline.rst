@@ -1,6 +1,8 @@
 The command-line ``zs`` tool
 =============================
 
+.. currentmodule:: zs
+
 The ``zs`` tool can be used from the command-line to create, view,
 and check ZS files.
 
