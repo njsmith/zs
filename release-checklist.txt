@@ -9,7 +9,7 @@
 * make sure there are no uncommitted changes
 * clone a clean source directory
 * in original directory: git tag <version> && git push --tags
-* in clean clone: python sdist --formats=zip,gztar upload
+* in clean clone: python setup.py sdist --formats=zip,gztar upload
 * Go to http://readthedocs.org/dashboard/zs/versions/, set the new
   version to build and update the default.
 * announce release on:
