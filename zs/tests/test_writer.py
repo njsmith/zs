@@ -227,3 +227,13 @@ def test_clogged_queue():
         with assert_raises(ZSError):
             while True:
                 zw.add_data_block([b"a"])
+
+# Regression test: had a bug where a empty terminated chunk would cause
+# alloc_hint=0 and trigger an infinite loop in pack_data_records.
+def test_short_file():
+    with temp_writer() as (p, zw):
+        zw.add_file_contents(BytesIO(b"\n"), 128 * 2 ** 10)
+        zw.finish()
+
+        with ok_zs(p) as z:
+            assert list(z) == [b""]

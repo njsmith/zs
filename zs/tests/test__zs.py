@@ -48,7 +48,7 @@ def test_read_uleb128():
 def test_data_records():
     records = [b"", b"\x00" * 16, b"a", b"b"]
     expected = b"\x00\x10" + b"\x00" * 16 + b"\x01a\x01b"
-    for alloc_hint in [1, 5, 100]:
+    for alloc_hint in [0, 1, 5, 100]:
         assert pack_data_records(records, alloc_hint) == expected
     assert pack_data_records(records) == expected
     assert unpack_data_records(expected) == records
@@ -72,7 +72,7 @@ def test_index_records():
                 + b"\x10" + b"\x00" * 16 + b"\x0a" + b"\x03"
                 + b"\x01a\xb9\x60\x04"
                 + b"\x01b\x80\xa0\x94\xa5\x8d\x1d\x80\x40")
-    for alloc_hint in [1, 5, 100]:
+    for alloc_hint in [0, 1, 5, 100]:
         print("asdf")
         assert pack_index_records(records, offsets, block_lengths, alloc_hint
             ) == expected

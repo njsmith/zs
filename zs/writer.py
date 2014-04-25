@@ -415,11 +415,8 @@ class ZSWriter(object):
         self._check_open()
         with errors_close(self):
             # Stop all the processing queues and wait for them to finish.
-            # if self._show_spinner:
-            #     sys.stdout.write("\n")
-            # sys.stdout.write("zs: Finished reading input; waiting for "
-            #                  "write thread to catch up\n")
             for i in range(self._parallelism):
+                #sys.stderr.write("putting QUIT\n"); sys.stderr.flush()
                 self._safe_put(self._compress_queue, _QUIT)
             for compressor in self._compressors:
                 self._safe_join(compressor)
@@ -494,16 +491,20 @@ class ZSWriter(object):
 # worker.
 def _compress_worker(compress_fn, codec_kwargs,
                      compress_queue, write_queue, error_queue):
-    # Local variables for speed
-    get = compress_queue.get
-    pdr = pack_data_records
-    put = write_queue.put
+    # me = os.getpid()
+    # def fyi(msg):
+    #     sys.stderr.write("compress_worker:%s: %s\n" % (me, msg))
+    #     sys.stderr.flush()
     with errors_to(error_queue):
+        # Local variables for speed
+        get = compress_queue.get
+        pdr = pack_data_records
+        put = write_queue.put
         while True:
             job = get()
-            #sys.stderr.write("compress_worker: got %r\n" % (job,))
+            #fyi("got %r" % (job,))
             if job is _QUIT:
-                #sys.stderr.write("compress_worker: QUIT\n")
+                #fyi("QUIT")
                 return
             if job[1] == "chunk-sep":
                 idx, job_type, buf, sep = job
@@ -515,21 +516,21 @@ def _compress_worker(compress_fn, codec_kwargs,
             else:  # pragma: no cover
                 assert False
             zpayload = compress_fn(payload, **codec_kwargs)
-            #sys.stderr.write("compress_worker: putting\n")
+            #fyi("putting")
             put((idx, records[0], records[-1], payload, zpayload))
 
 def _write_worker(path, branching_factor,
                   compress_fn, codec_kwargs,
                   write_queue, finish_queue,
                   show_spinner, error_queue):
-    data_appender = _ZSDataAppender(path, branching_factor,
-                                    compress_fn, codec_kwargs,
-                                    show_spinner)
-    pending_jobs = {}
-    wanted_job = 0
-    get = write_queue.get
-    write_block = data_appender.write_block
     with errors_to(error_queue):
+        data_appender = _ZSDataAppender(path, branching_factor,
+                                        compress_fn, codec_kwargs,
+                                        show_spinner)
+        pending_jobs = {}
+        wanted_job = 0
+        get = write_queue.get
+        write_block = data_appender.write_block
         while True:
             job = get()
             #sys.stderr.write("write_worker: got\n")

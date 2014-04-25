@@ -216,7 +216,10 @@ cdef bytes _pack_records(list records,
     cdef int i = 0
     cdef char * c_data
     cdef Py_ssize_t c_length
-    cdef uint8_t * buf = <uint8_t *>malloc(bufsize)
+    cdef uint8_t * buf
+    if bufsize == 0:
+        bufsize = 1
+    buf = <uint8_t *>malloc(bufsize)
     try:
         for i in range(n_records):
             PyBytes_AsStringAndSize(records[i],
