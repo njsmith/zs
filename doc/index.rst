@@ -141,12 +141,12 @@ these traditional formats:
   reliable, especially on scales of years and terabytes. I've dealt
   with RAID cards that would occasionally flip a single bit in the
   data that was being read from disk. How confident are you that this
-  won't be a bit that changes your results? Standard text files
+  won't be a key bit that totally changes your results? Standard text files
   provide no mechanism for detecting data corruption. Gzip and other
   traditional compression formats provide some protection, but it's
   only guaranteed to work if you read the entire file from start to
   finish and then remember to check the error code at the end, every
-  time. ZS, by contrast, protects every bit of data with 64-bit CRC
+  time. But ZS is different: it protects every bit of data with 64-bit CRC
   checksums, and the software we distribute will never show you any
   data that hasn't first been double-checked for
   correctness. (Fortunately, the cost of this checking is negligible;
@@ -159,10 +159,11 @@ these traditional formats:
   programmer with access to standard libraries could write a working
   decompressor in a few hours. The reference implementation is
   BSD-licensed, undergoes exhaustive automated testing (>98% coverage)
-  after every checkin, and includes an exhaustive file format
-  validator, so you can confirm that your files match the spec and be
-  confident that they will be readable by any compliant
-  implementation.
+  after every checkin, and just in case there are any ambiguities in
+  the English spec, we also have a complete :ref:`file format
+  validator <zs validate>`, so you can confirm that your files match
+  the spec and be confident that they will be readable by any
+  compliant implementation.
 
 * ZS files have a name **composed entirely of sibilants**: How many
   file formats can say *that*?

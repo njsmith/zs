@@ -20,6 +20,8 @@ https://matthew-brett.github.io/pydagogue/python_msvc.html
 ** once RTD is straightened out, and we have some real lzma test files
 make backports.lzma a proper requirement, and probably switch to lzma as our default
 
+** figure out how to get cython coverage (CYTHON_TRACE?)
+
 ** run a few benchmarks to see if we should cap parallelism, and/or tune block size
 
 * LZMA

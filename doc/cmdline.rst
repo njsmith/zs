@@ -188,8 +188,8 @@ these are).
    :shell:
 
 Obviously this is mostly intended for when you want to read the data
-into another program. For example, if you have a ZS file that was
-compressed using the bz2 codec and you want to convert it to the
+into another program. For example, if you had a ZS file that was
+compressed using the bz2 codec and you wanted to convert it to the
 deflate codec, the easiest and safest way to do that is with a command
 like::
 
@@ -198,8 +198,8 @@ like::
           "$(zs info -m myfile-bz2.zs)" - myfile-deflate.zs
 
 If you're using Python, of course, the most convenient way to read a
-ZS file is not to use ``zs dump`` at all, but to use the :mod:`zs`
-library API directly.
+ZS file into your program is not to use ``zs dump`` at all, but to use
+the :mod:`zs` library API directly.
 
 Full options:
 
