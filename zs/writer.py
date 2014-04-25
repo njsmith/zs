@@ -584,10 +584,11 @@ class _ZSDataAppender(object):
         self._written_bytes += written_bytes
         new_tick = self._written_bytes % SPIN_UPDATE_BYTES
         if done or old_tick != new_tick:
-            if old_tick > 0:
-                sys.stdout.write("\r")
-            sys.stdout.write("zs: Blocks written: %s"  # no \n
-                             % (self._written_blocks,))
+            if old_tick != new_tick:
+                if old_tick > 0:
+                    sys.stdout.write("\r")
+                sys.stdout.write("zs: Blocks written: %s"  # no \n
+                                 % (self._written_blocks,))
             if done:
                 sys.stdout.write("\n")
             sys.stdout.flush()
