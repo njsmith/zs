@@ -2,11 +2,6 @@
 # Copyright (C) 2013-2014 Nathaniel Smith <njs@pobox.com>
 # See file LICENSE.txt for license information.
 
-# TODO:
-# - add simple 'zs' test directly to .travis.yml
-#     or just have travis.yml set a variable we check here?
-#     try running test with skip if zs not on path
-#       and if var is set then fail instead of skip
 import sys
 import subprocess
 import os
