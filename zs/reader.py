@@ -220,6 +220,11 @@ class ZS(object):
       ``parallelism="guess"`` means to spawn one worker process per available
       CPU.
 
+      Note that if you know that you are going to read just a few records on
+      each search, then parallelism=0 may be slightly faster; this saves the
+      overhead of setting up the worker processes, and they only really help
+      when doing large bulk reads.
+
     :arg index_block_cache: The number of index blocks to keep cached in
       memory. This speeds up repeated queries. Larger values provide better
       caching, but take more memory. Usually you'll want this to at least be

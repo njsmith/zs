@@ -31,8 +31,12 @@ Selection options:
   are performed using ASCIIbetical ordering.
 
 Processing options:
-  -j PARALLELISM           The number of CPUs to use for decompression.
+  -j PARALLELISM           The number of CPUs to use for decompression. Note
+                           that if you know that you are only reading a small
+                           number of records, then -j0 may be the fastest
+                           option, since it reduces startup overhead.
                            [default: guess]
+
 Output options:
   -o FILE, --output=FILE   Output to the given file, or "-" for stdout.
                            [default: -]
