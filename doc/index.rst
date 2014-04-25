@@ -113,13 +113,13 @@ these traditional formats:
   terabyte file, or want a large span of records that are still much
   smaller than the full file (e.g., all 3-grams that begin "this
   is"). With ZS, you don't have to actually download the full 0.8
-  terabytes of data; given a URL to the file, the ZS tools can find
-  and fetch just the parts of the file you need. Of course going back
-  and forth to the server does add overhead; if you need to make a
-  large number of queries then it'll be faster (and kinder to
-  whoever's hosting the file!) to just download it. But there's no
-  point in throwing around gigabytes of data to answer a kilobyte
-  question.
+  terabytes of data. Given a URL to the file, the ZS tools can find
+  and fetch just the parts of the file you need, using nothing but
+  standard HTTP. Of course going back and forth to the server does add
+  overhead; if you need to make a large number of queries then it
+  might be faster (and kinder to whoever's hosting the file!) to just
+  download it. But there's no point in throwing around gigabytes of
+  data to answer a kilobyte question.
 
   Try it yourself:
 

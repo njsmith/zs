@@ -60,10 +60,10 @@ Basic searches
 File attributes and metadata
 ''''''''''''''''''''''''''''
 
-.. class:: ZS
+:class:`ZS` objects provides a number of read-only attributes
+that give general information about the ZS file:
 
-   :class:`ZS` objects provides a number of read-only attributes
-   that give general information about the ZS file:
+.. class:: ZS
 
    .. attribute:: metadata
       :annotation:

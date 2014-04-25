@@ -13,6 +13,8 @@ https://matthew-brett.github.io/pydagogue/python_msvc.html
 
 * Next
 
+** do a benchmark comparison of lzma read speed and raw uncompressed disk read speed...
+
 ** windows wheels?
 
 ** once RTD is straightened out, and we have some real lzma test files
