@@ -93,12 +93,17 @@ these traditional formats:
   entry takes 5 disk seeks and ~20 milliseconds of CPU time --
   something like 80 ms all told. (And hot cache performance -- e.g.,
   when performing repeated queries in the same file -- is even
-  better. The answer is 27 books.) When this data is stored as gzipped
-  text, then only way to locate an individual record, or span of
-  similar records, is start decompressing the file from the beginning
-  and wait until the records we want happen to scroll by, which in
-  this case -- as noted above -- could take more than 45
-  minutes. Here, using ZS is ~35,000x faster.
+  better.) The answer, by the way, is 27 books::
+
+      $ zs dump --prefix='this is fun\t1955\t' google-books-eng-us-all-20120701-3gram.zs
+      this is fun     1955    27      27
+
+  When this data is stored as gzipped text, then only way to locate an
+  individual record, or span of similar records, is start
+  decompressing the file from the beginning and wait until the records
+  we want happen to scroll by, which in this case -- as noted above --
+  could take more than 45 minutes. Using ZS makes this query ~35,000x
+  faster.
 
 * ZS files contain **rich metadata**: In addition to the raw data
   records, every ZS file contains a set of structured metadata in the
