@@ -14,6 +14,7 @@ import socket
 import traceback
 from contextlib import contextmanager
 from datetime import datetime
+import time
 
 import six
 
@@ -38,8 +39,8 @@ from zs._zs import (pack_data_records, pack_index_records,
 # seconds
 ERROR_CHECK_FREQ = 0.1
 
-# update the spinner every time we write this many bytes to the file
-SPIN_UPDATE_BYTES = 10 * 2 ** 20
+# seconds between spinner updates
+SPIN_UPDATE_TIME = 0.3
 
 def _flush_file(f):
     f.flush()
@@ -572,23 +573,23 @@ class _ZSDataAppender(object):
         self._hasher = hashlib.sha256()
 
         # spinner-related stuff
-        self._written_bytes = 0
+        self._last_update = 0
         self._written_blocks = 0
+        self._shown_blocks = None
         self._show_spinner = show_spinner
 
     def _spin(self, written_bytes, written_blocks, done):
         if not self._show_spinner:
             return
         self._written_blocks += written_blocks
-        old_tick = self._written_bytes % SPIN_UPDATE_BYTES
-        self._written_bytes += written_bytes
-        new_tick = self._written_bytes % SPIN_UPDATE_BYTES
-        if done or old_tick != new_tick:
-            if old_tick != new_tick:
-                if old_tick > 0:
-                    sys.stdout.write("\r")
+        now = time.time()
+        if done or now - self._last_update > SPIN_UPDATE_TIME:
+            if self._shown_blocks is not None:
+                sys.stdout.write("\r")
+            if self._written_blocks != self._shown_blocks:
                 sys.stdout.write("zs: Blocks written: %s"  # no \n
                                  % (self._written_blocks,))
+                self._shown_blocks = self._written_blocks
             if done:
                 sys.stdout.write("\n")
             sys.stdout.flush()
