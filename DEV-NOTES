@@ -25,12 +25,62 @@ make backports.lzma a proper requirement, and probably switch to lzma as our def
 ** run a few benchmarks to see if we should cap parallelism, and/or tune block size
 
 * LZMA
+** proper tuning
 
+using the 3gram "sk" file (not dump --prefix="sk", but the actual file), generated bz2 -9 and lzma -0e files with blocksize 128k, 256k, 384k, 512k, 768k
+
+three runs on truffle, so implicitly -j8 (to reduce network noise):
+
+| alg  |   bs | size (M) | run1 (sec) |   run2 |   run3 |   mean |    sd |
+|------+------+----------+------------+--------+--------+--------+-------|
+| bz2  |  128 |      466 |     29.905 | 29.740 | 29.715 | 29.787 | 0.103 |
+|      |  256 |      475 |     33.126 | 32.906 | 29.835 | 31.956 | 1.840 |
+|      |  384 |      484 |     33.657 | 34.556 | 36.592 | 34.935 | 1.504 |
+|      |  512 |      490 |     34.477 | 34.826 | 33.886 | 34.396 | 0.475 |
+|      |  768 |      500 |     36.331 | 37.478 | 35.336 | 36.382 | 1.072 |
+| lzma |  128 |      411 |     25.245 | 28.328 | 27.970 | 27.181 | 1.686 |
+| 0e   |  256 |      397 |     23.853 | 20.536 | 22.477 | 22.289 | 1.667 |
+|      |  384 |      391 |     23.147 | 22.018 | 19.267 | 21.477 | 1.996 |
+|      |  512 |      388 |     19.505 | 21.185 | 21.543 | 20.744 | 1.088 |
+|      |  768 |      385 |     21.649 | 18.444 | 18.058 | 19.384 | 1.971 |
+| lzma |  128 |          |            |        |        |        |       |
+| 1e   |  256 |      397 |            |        |        |        |       |
+|      |  384 |      391 |            |        |        |        |       |
+|      |  512 |      388 |            |        |        |        |       |
+|      |  768 |      385 |            |        |        |        |       |
+|      | 1024 |      382 |            |        |        |        |       |
+#+TBLFM: $7=vmean($4..$6);%.3f::$8=vsdev($4..$6);%.3f
+
+Observations:
+- for bz2
+  - larger block sizes make things slower (b/c the BWT complexity grows with the size of the data, I guess)
+  - larger block sizes also produce larger files (very weird!)
+- for lzma
+  - going from 128 -> 256 makes things much faster (20%?!), with smaller but possibly reliable gains after that
+  - larger block sizes make files smaller: big jump 128->256, smaller from 256->384, and even smaller after that. (256 is the lzma context size at 0e, so this also makes some sense)
+  - 1e has basically no size advantage -- at 768k, the actual sizes are 402655885 (1e) versus 403639270 (0e) -- so a little smaller, but less than 0.5%. the gap does grow with increasing block size, but it's still negligble.
+
+For 1e we might expect more of a win for larger blocksizes, at least on file size
+
+for BS in 384 512 768; do for CODEC in lzma bz2; do gunzip -c google-books-eng-us-all-20120701/3gram/sorted-googlebooks-eng-us-all-3gram-20120701-sk.gz | zs make '{}' - 3gram-sk-${BS}k-${CODEC}.zs --approx-block-size=$(($BS * 1024)) --codec $CODEC; done; done
+
+In [5]: for codec in ["bz2", "lzma"]:
+    for s in [128, 256, 384, 512, 768]:
+        z = ZS("3gram-sk-%sk-%s.zs" % (s, codec))
+        start = time.time()
+        z.dump(open("/dev/null", "wb"))
+        print((codec, s, "%0.3f" % (time.time() - start)))
+        z.close()
+   ...:
+
+
+** general benchmarks
 on the 'old/sorted' test vector, using branna, and python3
 
 | alg      |    size | compress time | decompress time |
 |----------+---------+---------------+-----------------|
-| bz2      | 1140258 | 799 ms        | 208 ms          |
+| bz2 -1   | 1036222 | 774 ms        | 153 ms          |
+| bz2 -9   | 1140258 | 799 ms        | 208 ms          |
 | lzma -0  | 1122836 | 340 ms        | 101 ms          |
 | lzma -1  | 1109110 | 396 ms        | 95.7 ms         |
 | lzma -0e |  810799 | 4520 ms       | 104 ms          |
