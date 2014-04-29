@@ -68,9 +68,9 @@ Output file options:
   --branching-factor=FACTOR  Number of keys in each *index* block.
                              [default: 1024]
   --approx-block-size=SIZE   Approximate *uncompressed* size of the records in
-                             each *data* block, in bytes. [default: 131072]
+                             each *data* block, in bytes. [default: 393216]
   --codec=CODEC              Compression algorithm. (Valid options: none,
-                             deflate, bz2, lzma.) [default: bz2]
+                             deflate, bz2, lzma.) [default: lzma]
   -z COMPRESS-LEVEL, --compress-level=COMPRESS-LEVEL
                              Degree of compression to use. Interpretation
                              depends on the codec in use:

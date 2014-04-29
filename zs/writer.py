@@ -140,7 +140,7 @@ def errors_close(obj):
 
 class ZSWriter(object):
     def __init__(self, path, metadata, branching_factor,
-                 parallelism="guess", codec="bz2", codec_kwargs={},
+                 parallelism="guess", codec="lzma", codec_kwargs={},
                  show_spinner=True, include_default_metadata=True):
         """Create a ZSWriter object.
 
@@ -159,7 +159,8 @@ class ZSWriter(object):
         :arg parallelism: The number of CPUs to use for compression, or "guess"
           to auto-detect. Must be >= 1.
 
-        :arg codec: The compression method to use.
+        :arg codec: The compression method to use. Valid values are "none",
+        "deflate", "bz2", "lzma".
 
         :arg codec_kwargs: kwargs to pass to the codec compress function. All
           codecs except 'none' support a compress_level argument. The 'lzma'
