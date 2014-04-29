@@ -5,7 +5,7 @@ Documentation:
   http://zs.readthedocs.org/
 
 Downloads:
-  http://pypi.python.org/pypi/zs/ [TODO]
+  http://pypi.python.org/pypi/zs/
 
 Dependencies:
   * Python 2.7, or Python 3.3+
