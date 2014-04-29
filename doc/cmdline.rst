@@ -49,7 +49,7 @@ Then we can compress it into a ZS file by running:
    directory, so that the rest of the examples in the documentation
    will match:
 
-.. command-output:: zs make '{"corpus": "doc-example"}' tiny-4grams.txt tiny-4grams.zs
+.. command-output:: zs make '{"corpus": "doc-example"}' tiny-4grams.txt tiny-4grams.zs --codec deflate
    :cwd: example/scratch
    :shell:
 
@@ -57,6 +57,11 @@ The first argument specifies some arbitrary metadata that will be
 saved into the ZS file, in the form of a `JSON <http://json.org>`_
 string, the second argument names the file we want to convert, and the
 third argument names the file we want to create.
+
+The ``--codec`` argument lets us choose which compression method we
+use; usually you should stick with the default (which is lzma), but
+until readthedocs.org responds to our bug report we can't use lzma
+here in the docs. Sorry.
 
 .. note:: You must ensure that your file is sorted before running
    ``zs make``. (If you don't, then it will error out and scold you.)
