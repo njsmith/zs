@@ -190,8 +190,8 @@ these traditional formats:
         :ellipsis: 2,-4
 
   If you have the ZS tools installed, you can try it right now. Here's
-  a real trace of a computer in Dallas searching the 10 terabyte
-  3-gram database at UCSD. Note that the computer at UCSD has no
+  a real trace of a computer in Dallas searching the 3-gram database
+  stored at UC San Diego. Note that the computer in San Diego has no
   special software installed at all -- this is just a static file
   that's available for download over HTTP::
 
