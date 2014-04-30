@@ -78,6 +78,7 @@ setup(
             "zs = zs.cmdline.main:entrypoint",
             ],
     },
-    install_requires=["six", "requests", "docopt"] + extra_requires,
+    # 1.4 is when six added "indexbytes"
+    install_requires=["six >= 1.4", "requests", "docopt"] + extra_requires,
     ext_modules=ext_modules,
 )
