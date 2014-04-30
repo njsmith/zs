@@ -15,6 +15,10 @@
 import sys
 import os
 
+os.system("apt-cache search python3")
+os.system("dpkg -l python3*")
+os.system("which python3")
+
 # On readthedocs.org, the doc build is run inside a virtualenv, with zs
 # installed, but the virtualenv bin/ dir is not on the path, so by default the
 # 'zs' command is not available to the programoutput extension. But we want
