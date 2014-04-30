@@ -15,17 +15,25 @@ stored in tab- or comma-separated format -- each line in such a file
 becomes a record in a ZS file. But ZS has a number of advantages over
 these traditional formats:
 
+.. all measurements on this page use tera/giga/mega in the SI sense,
+   i.e., 10^whatever, not 2^whatever.
+
+   actual sizes:
+     eng-us-all 3-gram uncompressed: 10165995927614 bytes
+        as distributed: 1278862975747 bytes
+        zs file with, lzma, -z 0e, 384k block size: 753997475853 bytes
+
 * ZS files are **small**: ZS files (optionally) store data in
   compressed form. The 3-gram counts from the 2012 US English release
   of the `Google N-grams
   <http://storage.googleapis.com/books/ngrams/books/datasetsv2.html>`_
   are distributed as a set of gzipped text files in tab-separated
   format, and take 1.3 terabytes of space. Uncompressed, this data set
-  comes to more than 9 terabytes (and would be even more if loaded
+  comes to more than 10 terabytes (and would be even more if loaded
   into a database). The same data in a ZS file with the default
-  settings (bzip2 compression) takes just 0.8 terabytes -- more than
-  35% smaller than the current distribution format, and 11x smaller
-  than the raw data.
+  settings (LZMA compression) takes just 0.75 terabytes -- this is
+  more than 41% smaller than the current distribution format, and
+  13.5x smaller than the raw data.
 
 .. Benchmarks in next paragraph:
 
@@ -35,47 +43,88 @@ these traditional formats:
       njsmith@hericium:/local/scratch/njs/google_books_ngrams_v2$ gunzip -c googlebooks-eng-us-all-3gram-20120701-th.gz  | pv -rabt > /dev/null
       506GB 0:47:34 [ 181MB/s] [ 181MB/s]
 
-      # ZS dump bz2, 32 CPUs
-      njsmith@hericium:/local/scratch/njs/google_books_ngrams_v2$ zs dump google-books-eng-us-all-2012070
-      1-3gram.zs --prefix="th" | pv -rabt >/dev/null
-      25.6GB 0:01:25 [ 291MB/s] [ 308MB/s]]
-      ^C
+      converted from mebibytes/s to megabytes/s:
+        -> 190 megabytes/s
 
-      # ZS dump bz2, 8 CPUs (note -j7 b/c this does not count the main thread)
-      njsmith@hericium:/local/scratch/njs/google_books_ngrams_v2$ zs dump -j7 google-books-eng-us-all-201
-      20701-3gram.zs --prefix="th" | pv -rabt >/dev/null
-      25.9GB 0:02:11 [ 239MB/s] [ 210MB/s]
-      ^C
+      # --prefix="sc" is a convenient way to get a large-enough sample
+      # to be meaningful, small-enough to not take too long, and
+      # to be representative of the kinds of actual-text-ngrams that
+      # we care about most (as compared to the ngrams that are just
+      # punctuation line noise, which may have different compression
+      # properties)
 
-* Nonetheless, ZS files are **fast**: ZS files allow decompression to
-  be parallelized over multiple CPUs, which is not possible with
-  traditional compression formats like gzip. And this is important,
-  because decompression is a slow and inherently serial
-  operation. Using a fast compute server for measurements, we found
-  that gunzip can spit out 3-gram data at ~180 MiB/s. Google
-  distributes these counts in many separate files; one of these, for
-  example, contains just the 3-grams that begin with the letters "th".
-  On our compute server, decompressing just this one file takes 47
-  minutes.
+      # ZS dump lzma, 8 CPUs (note -j7 b/c this does not count the main thread)
+      njsmith@hericium:/local/corpora/google-books-v2/eng-us-all$ time zs dump google-books-eng-us-all-20120701-3gram.zs --prefix="sc" -j 7 | pv -Wrabt | wc -c
+      20.1GB 0:00:55 [ 374MB/s] [ 374MB/s]
+      21616070118
 
-  Bzip2 decompression on its own is quite a bit slower than gunzip,
-  but with 8 CPUs and using Python's relatively crude parallelization
-  facilities, the same server can decompress our smaller ZS file at
-  210 MiB/s, and a careful implementation should scale nearly linearly
-  with the number of CPUs. And of course, we have the option of
-  choosing many different locations on the space/speed tradeoff curve:
-  if we used gzip compression in our ZS file, it'd be roughly the same
-  size as the current distribution format, but would decompress
-  multiple times faster; or with LZMA compression (which will probably
-  become the ZS default soon), decompression will be roughly twice as
-  fast as for bzip2, and produce even smaller files.
+      real    0m55.567s
+      user    5m40.845s
+      sys     1m4.348s
+
+      --> 389 megabytes/s (not mebibytes/s)
+
+      # ZS dump lzma, 16 CPUs (which is all of the cores, but there is
+      # 2x hyperthreading, so -j16 is not a no-op)
+      njsmith@hericium:/local/corpora/google-books-v2/eng-us-all$ time zs dump google-books-eng-us-all-20120701-3gram.zs --prefix="sc" -j 16 | pv -Wrabt | wc -c
+      20.1GB 0:00:42 [ 486MB/s] [ 486MB/s]
+      21616070118
+
+      real    0m42.971s
+      user    6m54.638s
+      sys     1m15.189s
+
+      --> 503 megabytes/s (not mebibytes)
+
+      # ZS dump lzma, 1 CPU
+      njsmith@hericium:/local/corpora/google-books-v2/eng-us-all$ time zs dump google-books-eng-us-all-2
+      0120701-3gram.zs --prefix="sc" -j0 | pv -Wrabt | wc -c
+      20.1GB 0:07:14 [47.4MB/s] [47.4MB/s]
+      21616070118
+
+      real    7m15.289s
+      user    6m35.841s
+      sys     0m50.835s
+
+      --> 49.7 megabytes/s (not mebibytes)
+
+      With v0.9.0 of the zs tools, we get ~linear scaling until -j
+      reaches something in the 8-10 range -- it looks like the main
+      thread becomes the bottleneck here.
+
+* Nonetheless, ZS files are **fast**: Decompression is an inherently
+  slow and serial operation, which means that reading compressed files
+  can easily become the bottleneck in an analysis. Google distributes
+  the 3-gram counts in many separate ``.gz`` files; one of these, for
+  example, contains just the n-grams that begin with the letters
+  "th". Using a single core on a handy compute server, we find that
+  we can get decompressed data out of this ``.gz`` file at ~190
+  MB/s. At this rate, reading this one file takes more than 47
+  minutes -- and that's before we even begin analyzing the data inside
+  it.
+
+.. raw disk throughput:
+   njsmith@hericium:/local/corpora/google-books-v2/eng-us-all$ pv google-books-eng-us-all-20120701-5gram.zs -rabt >/dev/null
+   58.7GB 0:08:18 [63.8MB/s] [ 121MB/s]
+   ^C
+   -> 126.9 megabytes/s
+   x3 = 380 MB/s.
+
+  The LZMA compression used in our ZS file is, on its own, slower than
+  gzip. If we restrict ourselves to a single core, then we can only
+  read our ZS file at ~50 MB/s. However, ZS files allow for
+  multithreaded decompression. Using 8 cores, gunzip runs at... still
+  ~190 MB/s, because gzip decompression cannot be parallelized. On
+  those same 8 cores, our ZS file decompresses at ~390 MB/s -- a
+  nearly linear speedup. This is also ~3x faster than our test server
+  can read an *un*\compressed file.
 
 .. Benchmarks in next paragraph:
 
-   On hericium.ucsd.edu, using file with bz2 codec:
+   On hericium.ucsd.edu, using lzma/384k:
 
-       %timeit list(zs.ZS("google-books-eng-us-all-20120701-3gram.zs", parallelism=0).search(prefix=b"this is fun\t1955\t"))
-       10 loops, best of 3: 21.6 ms per loop
+      %timeit list(zs.ZS("google-books-eng-us-all-20120701-3gram.zs", parallelism=0).search(prefix=b"this is fun\t1955\t"))
+      10 loops, best of 3: 26.6 ms per loop
 
    "5 disk seeks" = 'zs info' says root level is 3
 
@@ -90,8 +139,8 @@ these traditional formats:
   can query on any column, but it can be extremely useful for data
   sets where the first column (or first several columns) are usually
   used for lookup. Using our example file, finding the "this is fun"
-  entry takes 5 disk seeks and ~20 milliseconds of CPU time --
-  something like 80 ms all told. (And hot cache performance -- e.g.,
+  entry takes 5 disk seeks and ~25 milliseconds of CPU time --
+  something like 85 ms all told. (And hot cache performance -- e.g.,
   when performing repeated queries in the same file -- is even
   better.) The answer, by the way, is 27 books::
 
@@ -102,7 +151,7 @@ these traditional formats:
   individual record, or span of similar records, is start
   decompressing the file from the beginning and wait until the records
   we want happen to scroll by, which in this case -- as noted above --
-  could take more than 45 minutes. Using ZS makes this query ~35,000x
+  could take more than 45 minutes. Using ZS makes this query ~33,000x
   faster.
 
 * ZS files contain **rich metadata**: In addition to the raw data
@@ -126,16 +175,34 @@ these traditional formats:
   download it. But there's no point in throwing around gigabytes of
   data to answer a kilobyte question.
 
+  .. Below is disabled until RTD installs the packages we need for
+     lzma to work:
+
+     If you have the ZS tools installed, you can try it right now. Here's
+     a live run from the readthedocs.org servers, which are nowhere near
+     UCSD:
+
+     .. sneaky hack: we set the TIME envvar in conf.py to get nicer
+        output from the 'time' command called here
+
+     .. command-output:: time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
+        :shell:
+        :ellipsis: 2,-4
+
   If you have the ZS tools installed, you can try it right now. Here's
-  a live run from the readthedocs.org servers, which are nowhere near
-  UCSD:
+  a real trace of a computer in Dallas searching the 10 terabyte
+  3-gram database at UCSD. Note that the computer at UCSD has no
+  special software installed at all -- this is just a static file
+  that's available for download over HTTP::
 
-  .. sneaky hack: we set the TIME envvar in conf.py to get nicer
-     output from the 'time' command called here
+      $ time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
+      this is fun       1729    1       1
+      this is fun       1848    1       1
+      ...
+      this is fun       2008    435     420
+      this is fun       2009    365     352
 
-  .. command-output:: time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
-     :shell:
-     :ellipsis: 2,-4
+      Real time elapsed: 1.425 seconds
 
 * ZS files are **ever-vigilant**: Computer hardware is simply not
   reliable, especially on scales of years and terabytes. I've dealt

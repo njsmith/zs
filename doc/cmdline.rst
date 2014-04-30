@@ -6,8 +6,8 @@ The command-line ``zs`` tool
 The ``zs`` tool can be used from the command-line to create, view,
 and check ZS files.
 
-The main ``zs`` command on its own isn't very useful -- it can tell
-you check what version you have:
+The main ``zs`` command on its own isn't very useful. It can tell
+you what version you have -- these docs were built with:
 
 .. command-output:: zs --version
 
@@ -55,7 +55,7 @@ Then we can compress it into a ZS file by running:
 
 The first argument specifies some arbitrary metadata that will be
 saved into the ZS file, in the form of a `JSON <http://json.org>`_
-string, the second argument names the file we want to convert, and the
+string; the second argument names the file we want to convert; and the
 third argument names the file we want to create.
 
 The ``--codec`` argument lets us choose which compression method we
@@ -106,10 +106,8 @@ field is, as you might expect, a `SHA-256
 in this file -- two ZS files will have the same value here if and
 only if they contain exactly the same logical records, regardless of
 compression and other details of physical file layout. The ``"codec"``
-field tells us which kind of compression was used (this file uses the
-`bzip2 format <https://en.wikipedia.org/wiki/Bzip2>`_); if we wanted
-something different we could have passed ``--codec`` to ``zs
-make``. The other fields have to do with more obscure technical
+field tells us which kind of compression was used. The other fields
+have to do with more obscure technical
 aspects of the ZS file format; see the documentation for the
 :class:`ZS` class and the :ref:`file format specification <format>`
 for details.
@@ -196,13 +194,13 @@ these are).
 
 Obviously this is mostly intended for when you want to read the data
 into another program. For example, if you had a ZS file that was
-compressed using the bz2 codec and you wanted to convert it to the
+compressed using the lzma codec and you wanted to convert it to the
 deflate codec, the easiest and safest way to do that is with a command
 like::
 
-    $ zs dump --length-prefixed=uleb128 myfile-bz2.zs | \
+    $ zs dump --length-prefixed=uleb128 myfile-lzma.zs | \
       zs make --length-prefixed=uleb128 --codec=deflate \
-          "$(zs info -m myfile-bz2.zs)" - myfile-deflate.zs
+          "$(zs info -m myfile-lzma.zs)" - myfile-deflate.zs
 
 If you're using Python, of course, the most convenient way to read a
 ZS file into your program is not to use ``zs dump`` at all, but to use

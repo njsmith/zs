@@ -271,7 +271,7 @@ The header contains the following fields, in order:
     "extreme" 0e and 1e modes, but not higher. This is pretty
     reasonable, since there is never any advantage to using a
     dictionary size that is larger than a single block payload, and we
-    expect 1 MiB blocks to be rare; but, if there is demand, we may
+    expect >1 MiB blocks to be rare; but, if there is demand, we may
     add further modes with larger dictionary sizes.
 
     As compared to using XZ format, raw LZMA2 streams are ~0.5%
