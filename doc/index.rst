@@ -10,8 +10,8 @@ ZS is a simple, read-only, binary file format designed for
 distributing, querying, and archiving arbitarily large data sets (up
 to tens of terabytes and beyond) -- so long as those data sets can be
 represented as a set of arbitrary binary records. Of course it works
-on small data sets too. You can think of it as a replacement for files
-stored in tab- or comma-separated format -- each line in such a file
+on small data sets too. You can think of it as an alternative to
+storing data in tab- or comma-separated files -- each line in such a file
 becomes a record in a ZS file. But ZS has a number of advantages over
 these traditional formats:
 
@@ -92,6 +92,13 @@ these traditional formats:
       reaches something in the 8-10 range -- it looks like the main
       thread becomes the bottleneck here.
 
+     raw disk throughput:
+     njsmith@hericium:/local/corpora/google-books-v2/eng-us-all$ pv google-books-eng-us-all-20120701-5gram.zs -rabt >/dev/null
+     58.7GB 0:08:18 [63.8MB/s] [ 121MB/s]
+     ^C
+     -> 126.9 megabytes/s
+     and 3x this is = 380 MB/s.
+
 * Nonetheless, ZS files are **fast**: Decompression is an inherently
   slow and serial operation, which means that reading compressed files
   can easily become the bottleneck in an analysis. Google distributes
@@ -103,13 +110,6 @@ these traditional formats:
   minutes -- and that's before we even begin analyzing the data inside
   it.
 
-.. raw disk throughput:
-   njsmith@hericium:/local/corpora/google-books-v2/eng-us-all$ pv google-books-eng-us-all-20120701-5gram.zs -rabt >/dev/null
-   58.7GB 0:08:18 [63.8MB/s] [ 121MB/s]
-   ^C
-   -> 126.9 megabytes/s
-   x3 = 380 MB/s.
-
   The LZMA compression used in our ZS file is, on its own, slower than
   gzip. If we restrict ourselves to a single core, then we can only
   read our ZS file at ~50 MB/s. However, ZS files allow for
@@ -117,7 +117,7 @@ these traditional formats:
   ~190 MB/s, because gzip decompression cannot be parallelized. On
   those same 8 cores, our ZS file decompresses at ~390 MB/s -- a
   nearly linear speedup. This is also ~3x faster than our test server
-  can read an *un*\compressed file.
+  can read an *un*\compressed file from disk.
 
 .. Benchmarks in next paragraph:
 
@@ -163,10 +163,10 @@ these traditional formats:
   confident that it will follow your data where-ever it goes.
 
 * ZS files are **network friendly**: Suppose you know you just want to
-  look up a few individual records that are buried inside that 0.8
+  look up a few individual records that are buried inside that 0.75
   terabyte file, or want a large span of records that are still much
   smaller than the full file (e.g., all 3-grams that begin "this
-  is"). With ZS, you don't have to actually download the full 0.8
+  is"). With ZS, you don't have to actually download the full 0.75
   terabytes of data. Given a URL to the file, the ZS tools can find
   and fetch just the parts of the file you need, using nothing but
   standard HTTP. Of course going back and forth to the server does add
