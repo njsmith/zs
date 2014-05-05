@@ -168,8 +168,8 @@ def test_make():
 
         # codecs and compress level
         # we need some non-trivial input (so the compression algorithms have
-        # some work to do), that's large enough for things like the bz2 window
-        # size to make a difference.
+        # some work to do), that's large enough for things like window
+        # sizes to make a difference.
         r = random.Random(0)
         scrambled_letters = "".join(r.sample("abcdefghijklmnopqrstuvwxyz", 26))
         scrambled_letters = scrambled_letters.encode("ascii")
@@ -186,8 +186,6 @@ def test_make():
 
         sizes = {}
         for settings in ["--codec=none",
-                         "--codec=bz2",
-                         "--codec=bz2 -z 1",
                          "--codec=deflate",
                          "--codec=deflate --compress-level 1",
                          "--codec=lzma",
@@ -198,17 +196,13 @@ def test_make():
                          ]:
             with temp_zs_path() as p_out:
                 run(["make", "{}", "-", p_out,
-                     # bigger than both the bz2 -z 1 blocksize of 100k
-                     # and the lzma -z 0 blocksize of 256k
+                     # bigger than the lzma -z 0 blocksize of 256k
                      "--approx-block-size", "400000"] + settings.split(),
                     input=bigger_input)
                 sizes[settings] = os.stat(p_out).st_size
         assert (sizes["--codec=lzma --compress-level 0e"]
                 == sizes["--codec=lzma"])
         for big, small in [("none", "deflate"),
-                           ("deflate", "bz2"),
-                           ("bz2", "lzma"),
-                           ("bz2 -z 1", "bz2"),
                            ("deflate --compress-level 1", "deflate"),
                            ("lzma --compress-level 0",
                             "lzma --compress-level 1"),

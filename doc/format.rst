@@ -3,11 +3,11 @@
 On-disk layout of ZS files
 ===========================
 
-This page provides a complete specification of version **0.9** of the ZS
-file format, along with rationale for specific design choices. It
-should be read by anyone who plans to implement a new reader or writer
-for the format, or is just interested in how things work under the
-covers.
+This page provides a complete specification of version **0.10** of
+the ZS file format, along with rationale for specific design
+choices. It should be read by anyone who plans to implement a new
+reader or writer for the format, or is just interested in how things
+work under the covers.
 
 Overview
 --------
@@ -254,13 +254,6 @@ The header contains the following fields, in order:
     checksums. ZS provides its own framing and checksum, so we just
     use raw deflate streams.
 
-  * ``bz2``: Block payloads are compressed using `the bzip2 format
-    <https://en.wikipedia.org/wiki/Bzip2>`_. Unfortunately there is no
-    easy way to get a raw, unframed bzip2 stream with commonly
-    available libraries, so using this method adds 10-20 bytes of
-    extra framing overhead. Fortunately the improved compression
-    usually more than makes up for this.
-
   * ``lzma2;dsize=2^20``: Block payloads are represented as raw LZMA2
     bitstreams that can be decompressed using a dictionary size of
     :math:`2^20` bytes (i.e., 1 MiB); this means that each decoder
@@ -275,11 +268,11 @@ The header contains the following fields, in order:
     add further modes with larger dictionary sizes.
 
     As compared to using XZ format, raw LZMA2 streams are ~0.5%
-    smaller, so that's nice, but more importantly the use of raw
+    smaller, so that's nice. And, more importantly, the use of raw
     streams dramatically reduces the complexity requirements on
     readers, which is important for an archival format. Doing things
-    this way means that there's no need to be able to handle the
-    multi-gigabyte dictionary sizes, complicated filter chains,
+    this way means that readers don't need to be prepared to handle
+    the multi-gigabyte dictionary sizes, complicated filter chains,
     multiple checksums, etc., which the XZ format allows.
 
 * Metadata length (``u64le``): The length of the next field:
@@ -433,5 +426,7 @@ Specification history
 
 .. Also update the first line of this file whenever we add stuff to
    the format.
+
+* Version 0.10: Remove support for the ``bz2`` compression format.
 
 * Version 0.9: First public release.

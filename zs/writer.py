@@ -160,7 +160,7 @@ class ZSWriter(object):
           to auto-detect. Must be >= 1.
 
         :arg codec: The compression method to use. Valid values are "none",
-        "deflate", "bz2", "lzma".
+          "deflate", "lzma".
 
         :arg codec_kwargs: kwargs to pass to the codec compress function. All
           codecs except 'none' support a compress_level argument. The 'lzma'

@@ -3,7 +3,6 @@
 # See file LICENSE.txt for license information.
 
 import zlib
-import bz2
 import struct
 import ctypes
 
@@ -28,11 +27,7 @@ header_data_format = [
     ("total_file_length", "<Q"),
     # sha256(concat(all data blocks)), to let us uniquely identify archives
     ("sha256", "32s"),
-    # A null-padded code for the storage algorithm used. So far:
-    #   "none"
-    #   "deflate"
-    #   "bz2"
-    #   "lzma"
+    # A null-padded code for the storage algorithm used.
     ("codec", "NUL-padded-ascii-16"),
     # "<Q" giving length, then arbitrary utf8-encoded json
     ("metadata", "length-prefixed-utf8-json"),
@@ -71,14 +66,6 @@ def deflate_compress(payload, compress_level=6):
 
 def deflate_decompress(zpayload):
     return zlib.decompress(zpayload, -15)
-
-# Standardize the name of the compress_level argument:
-def bz2_compress(payload, compress_level=9):
-    # This uses bz2 framing, which is wasteful and means we end up with a
-    # double-checksum, but checksumming is more than an order of magnitude
-    # faster than bz2 itself, and there's no practical way to get a 'raw' bz2
-    # stream, so oh well.
-    return bz2.compress(payload, compress_level)
 
 def none_compress(payload):
     return payload
@@ -132,7 +119,6 @@ else:
 # These callables must be pickleable for multiprocessing.
 codecs = {
     "deflate": (deflate_compress, deflate_decompress),
-    "bz2": (bz2_compress, bz2.decompress),
     "none": (none_compress, none_decompress),
     "lzma2;dsize=2^20": (lzma_compress_dsize20, lzma_decompress_dsize20),
 }
@@ -143,7 +129,6 @@ codecs = {
 # the code here to automatically pick the right underlying codec string.
 codec_shorthands = {
     "deflate": "deflate",
-    "bz2": "bz2",
     "none": "none",
     "lzma": "lzma2;dsize=2^20",
 }

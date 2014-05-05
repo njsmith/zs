@@ -70,19 +70,20 @@ Output file options:
   --approx-block-size=SIZE   Approximate *uncompressed* size of the records in
                              each *data* block, in bytes. [default: 393216]
   --codec=CODEC              Compression algorithm. (Valid options: none,
-                             deflate, bz2, lzma.) [default: lzma]
+                             deflate, lzma.) [default: lzma]
   -z COMPRESS-LEVEL, --compress-level=COMPRESS-LEVEL
                              Degree of compression to use. Interpretation
                              depends on the codec in use:
                                deflate: An integer between 1 and 9.
                                  (Default: 6)
-                               bz2: An integer between 1 and 9. (Default: 9)
                                lzma: One of the strings 0, 0e, 1, or 1e.
-                                 Note that 0 and 1 are several times faster
-                                 than 0e and 1e, though at some cost in
-                                 compression ratio. Note also that there is no
-                                 benefit to using 1 or 1e unless you also
-                                 increase --approx-block-size. (Default: 0e)
+                                 The number (0 versus 1) indicates the history
+                                 size used in the compression -- there's no
+                                 point in using 1 or 1e unless you also
+                                 increase --approx-block-size. The presence of
+                                 the "e" turns on "extreme" mode, which is
+                                 several times slower, but may produce
+                                 substantially smaller files. (Default: 0e)
   --no-default-metadata      By default, 'zs make' adds an extra "build-info"
                              key to the metadata, recording the time, host,
                              user who created the file, and zs library

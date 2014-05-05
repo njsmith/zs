@@ -130,7 +130,7 @@ def test_zs():
 # the tricky code, so we make this test less exhaustive.
 def test_http_zs():
     with web_server(test_data_path()) as root_url:
-        codec = "bz2"
+        codec = "deflate"
         url = "%s/letters-%s.zs" % (root_url, codec)
         for parallelism in [0, 2]:
             with ZS(url=url, parallelism=parallelism) as z:
@@ -138,7 +138,7 @@ def test_http_zs():
 
 def test_http_notices_lack_of_range_support():
     with web_server(test_data_path(), range_support=False) as root_url:
-        codec = "bz2"
+        codec = "deflate"
         url = "%s/letters-%s.zs" % (root_url, codec)
         assert_raises(ZSError, lambda: list(ZS(url=url)))
 
