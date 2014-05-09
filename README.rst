@@ -24,18 +24,23 @@ Documentation:
   http://zs.readthedocs.org/
 
 Installation:
-  Because ``zs`` includes a C extension, you'll need a C compiler to
-  install it. You'll also need either Python 2.7, or else Python 3.3
-  or greater.
+  You need either Python **2.7**, or else Python **3.3 or greater**.
 
-  Assuming you have a C compiler available, installation in Python 3
-  should be as simple as::
+  Because ``zs`` includes a C extension, you'll also need a C compiler
+  and Python headers. On Ubuntu or Debian, for example, you get these
+  with::
+
+    sudo apt-get install build-essential python-dev
+
+  Once you have the ability to build C extensions, then on Python
+  3 you should be able to just run::
 
     pip install zs
 
-  On Python 2.7, ``zs`` also requires the ``backports.lzma`` package,
-  which in turn requires the liblzma library. On Ubuntu or Debian, for
-  example, something like this should work::
+  On Python 2.7, things are slightly more complicated: here, ``zs``
+  requires the ``backports.lzma`` package, which in turn requires the
+  liblzma library. On Ubuntu or Debian, for example, something like
+  this should work::
 
     sudo apt-get install liblzma-dev
     pip install backports.lzma
@@ -43,7 +48,7 @@ Installation:
 
   ``zs`` also requires the following packages: ``six``, ``docopt``,
   ``requests``. However, these are all pure-Python packages which pip
-  will install for you automatically.
+  will install for you automatically when you run ``pip install zs``.
 
 Downloads:
   http://pypi.python.org/pypi/zs/
