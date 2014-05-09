@@ -3,7 +3,7 @@
   * make sure appropriate ..versionadded:: directives are present
   * make sure docs are up to date
   * check coverage
-  * cd docs; make html -- check that there are no warnings
+  * cd doc; make html -- check that there are no warnings
 * check MANIFEST.in
 * update zs/version.py
 * make sure there are no uncommitted changes
