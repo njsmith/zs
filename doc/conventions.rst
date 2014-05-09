@@ -73,17 +73,20 @@ meaningful. Some general principles:
 
 * **Beware of quoting.** This arises especially for common CSV formats,
   where fields containing the characters ``,`` or ``"`` often get
-  special handling. For example, suppose we have some nicely organized
+  special handling. For example, suppose we have some nice, sorted,
   n-grams::
 
-      to be , or not to be
-      to be disjoint and out of frame
       'Tis Hamlet 's character . " Naked ! "
       'Tis now the very witching time
       What a piece of work is a man !
+      to be , or not to be
+      to be disjoint and out of frame
 
-  If we encode these as a column in CSV format, and then sort, we end
-  up with::
+  Notice that thanks to the sorting, all the n-grams that share a
+  common prefix like ``'Tis`` or ``to be`` have been nicely grouped
+  together. Now, let's use standard CSV writing software (I used
+  Python's :mod:`csv` module) to encode these as a column in a CSV file,
+  and then sort the result. What we end up with is a mess::
 
       "'Tis Hamlet 's character . "" Naked ! """
       "to be , or not to be"
@@ -92,16 +95,16 @@ meaningful. Some general principles:
       to be disjoint and out of frame
 
   Notice that every entry that contained a ``,`` or ``"`` has been
-  wrapped in ``"``\'s. If we want to find n-grams beginning ``to be``
-  or ``'Tis`` then a simple prefix search will no longer work; when we
+  wrapped in ``"``\'s. If we want to find n-grams beginning ``'Tis``
+  or ``to be`` then a simple prefix search will no longer work; when we
   want to find records with the prefix ``foo`` we have to remember
   always to search for both ``foo`` and ``"foo``.
 
   Ideally there is some character that you know will never occur in
   any field, and you can use that for your separator -- then no
-  quoting is ever needed. This might be tab (\t), or if you get
-  desperate then there are other options like NUL (\00) or newline
-  (\n) -- though with these latter options you'll lose some of the
+  quoting is ever needed. This might be tab (\\t), or if you get
+  desperate then there are other options like NUL (\\00) or newline
+  (\\n) -- though with these latter options you'll lose some of the
   convenience of browsing your data with simple tools like :ref:`zs
   dump`, and may have to play around a bit more with :ref:`zs make`'s
   options to construct your file in the first place.
@@ -123,16 +126,16 @@ meaningful. Some general principles:
   but they do have excellent sorting properties.
 
   In the Google n-grams, the year field fortunately turns out to be
-  fixed width (at least until Google starts scanning papyruses). And
-  for the actual count fields, this formatting issue doesn't arise,
-  because we have no reason to index on them.
+  fixed width (at least until Google gets their papyrus scanner
+  running). And for the actual count fields, this formatting issue
+  doesn't arise, because we have no reason to index on counts.
 
 * **Beware of little-endian Unicode and surrogate pairs.** ASCII,
   UTF-8, and UTF-32BE all have sensible sort orders (i.e.,
   ASCIIbetical sort on the encoded strings is the same as
-  lexicographic sort on code points). This is definitely not true for
-  UTF-16LE or UTF-32LE, and is not *quite* true for UTF-16BE, because
-  of the existence of surrogate pairs (`see
+  lexicographic sort on Unicode code points). This is definitely not
+  true for UTF-16LE or UTF-32LE, and is not *quite* true for UTF-16BE,
+  because of the existence of surrogate pairs (`see
   e.g. <https://ssl.icu-project.org/docs/papers/utf16_code_point_order.html>`_).
 
   Of course, if all you want are exact prefix searches, then these issues
@@ -148,5 +151,5 @@ meaningful. Some general principles:
 If these issues turn out to cause enough problems, it may makes sense
 at some point to define a revised version of the ZS format which has
 an explicit schema for record contents, and uses a content-sensitive
-sort order (e.g., one that performs numeric comparison on numeric
+sort order (e.g., one that knows to use numeric comparison on numeric
 fields).
