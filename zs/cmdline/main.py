@@ -131,4 +131,8 @@ For details, use 'zs <subcommand> --help'.
     return subcommand_fn(subopts)
 
 def entrypoint():
-    return main(sys.argv[1:])
+    try:
+        return main(sys.argv[1:])
+    except KeyboardInterrupt:
+        sys.stderr.write("zs: interrupted\n")
+        sys.exit(1)
