@@ -13,16 +13,13 @@ https://matthew-brett.github.io/pydagogue/python_msvc.html
 
 * Next
 
-** do a benchmark comparison of lzma read speed and raw uncompressed disk read speed...
+** windows wheels? (and also for backports.lzma?)
 
-** windows wheels?
-
-** once RTD is straightened out, and we have some real lzma test files
-make backports.lzma a proper requirement, and probably switch to lzma as our default
+** once RTD is straightened out, make backports.lzma a proper requirement
 
 ** figure out how to get cython coverage (CYTHON_TRACE?)
 
-** run a few benchmarks to see if we should cap parallelism, and/or tune block size
+** check whether the 50 MIB/s/worker we get from both deflate and lzma is b/c of being bottlenecked on unpack_data_records
 
 * LZMA
 ** proper tuning
