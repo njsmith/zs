@@ -2,8 +2,7 @@ language: python
 python:
   - 2.7
   - 3.3
-  # this should work -- re-enable once travis has 3.4 installed!
-  # - 3.4
+  - 3.4
 before_install:
   - sudo apt-get -qq install nginx liblzma-dev
   # This has to be done to let it create some files that nginx insists must exist, yet only root can create.
