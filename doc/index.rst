@@ -179,7 +179,7 @@ these traditional formats:
   a live trace of the readthedocs.org servers searching the 3-gram
   database stored at UC San Diego. Note that the computer in San
   Diego has no special software installed at all -- this is just a
-  static file that's available for download over HTTP::
+  static file that's available for download over HTTP:
 
   .. sneaky hack: we set the TIME envvar in conf.py to get nicer
      output from the 'time' command called here
