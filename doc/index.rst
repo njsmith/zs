@@ -175,34 +175,44 @@ these traditional formats:
   download it. But there's no point in throwing around gigabytes of
   data to answer a kilobyte question.
 
-  .. Below is disabled until RTD installs the packages we need for
-     lzma to work:
-
-     If you have the ZS tools installed, you can try it right now. Here's
-     a live run from the readthedocs.org servers, which are nowhere near
-     UCSD:
-
-     .. sneaky hack: we set the TIME envvar in conf.py to get nicer
-        output from the 'time' command called here
-
-     .. command-output:: time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
-        :shell:
-        :ellipsis: 2,-4
-
   If you have the ZS tools installed, you can try it right now. Here's
-  a real trace of a computer in Dallas searching the 3-gram database
-  stored at UC San Diego. Note that the computer in San Diego has no
-  special software installed at all -- this is just a static file
-  that's available for download over HTTP::
+  a live trace of the readthedocs.org servers searching the 3-gram
+  database stored at UC San Diego. Note that the computer in San
+  Diego has no special software installed at all -- this is just a
+  static file that's available for download over HTTP::
 
-      $ time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
-      this is fun       1729    1       1
-      this is fun       1848    1       1
-      ...
-      this is fun       2008    435     420
-      this is fun       2009    365     352
+  .. sneaky hack: we set the TIME envvar in conf.py to get nicer
+     output from the 'time' command called here
 
-      Real time elapsed: 1.425 seconds
+  .. command-output:: time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
+     :shell:
+     :ellipsis: 2,-4
+
+  ..
+     If you have the ZS tools installed, you can try it right now. Here's
+     a real trace of a computer in Dallas searching the 3-gram database
+     stored at UC San Diego. Note that the computer in San Diego has no
+     special software installed at all -- this is just a static file
+     that's available for download over HTTP::
+
+         $ time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
+         this is fun       1729    1       1
+         this is fun       1848    1       1
+         ...
+         this is fun       2008    435     420
+         this is fun       2009    365     352
+
+         Real time elapsed: 1.425 seconds
+
+* ZS files are **splittable**: If you're using a big distributed data
+  processing system (e.g. Hadoop), then it's useful to split
+  up your file into pieces that approximately match the underlying
+  storage chunks, so each CPU can work on locally stored data. This is
+  only possible, though, if your file format makes it possible to
+  efficiently start reading near arbitrary positions in a file. With
+  ZS files, this is possible (though because this requires multiple
+  index lookups, it's not as convenient as in file formats designed
+  with this as a primary consideration).
 
 * ZS files are **ever-vigilant**: Computer hardware is simply not
   reliable, especially on scales of years and terabytes. I've dealt
