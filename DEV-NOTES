@@ -12,7 +12,7 @@ https://github.com/cython/cython/wiki/64BitCythonExtensionsOnWindows
 https://matthew-brett.github.io/pydagogue/python_msvc.html
 
 * Next
-
+** to alleviate multiprocessing flakiness, and speed things up in general, when parallelism="guess" then delay spawning worker pool until after we hit the third block within a single read thread
 ** windows wheels? (and also for backports.lzma?)
 
 ** once RTD is straightened out, make backports.lzma a proper requirement
