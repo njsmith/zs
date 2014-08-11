@@ -1,5 +1,5 @@
-Project logistics
-=================
+Project overview
+================
 
 Documentation:
   http://zs.readthedocs.org/
