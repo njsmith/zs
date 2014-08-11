@@ -3,7 +3,7 @@
 On-disk layout of ZS files
 ===========================
 
-This page provides a complete specification of version **0.10** of
+This document provides a complete specification of version **0.10** of
 the ZS file format, along with rationale for specific design
 choices. It should be read by anyone who plans to implement a new
 reader or writer for the format, or is just interested in how things
@@ -68,7 +68,7 @@ indexing scheme: the header contains a pointer to the "root" index
 block, which in turn refers to other index blocks, which refer to
 other index blocks, until eventually the lowest-level index blocks
 refer to data blocks. By following these links, we can locate any
-arbitrary record in :math:`O(\log n)` time.
+arbitrary record in :math:`O(\log n)` time and disk accesses.
 
 In addition, we require data blocks to be arranged in sorted order
 within the file. This allows us to do streaming reads starting from
@@ -111,20 +111,22 @@ Within the ZS header, we make life easier for simple tools like `file
 integers using fixed-length 64-bit little-endian format (``u64le`` for
 short).
 
-Outside of the header, integers are encoded in the *uleb128* format,
-familiar from the `DWARF debugging format
-<https://en.wikipedia.org/wiki/DWARF>`_. Okay, maybe not so
-familiar. This is a simple variable-length encoding for unsigned
-integers of arbitrary size using **u**\nsigned **l**\ittle-**e**\ndian
-**b**\ase-**128**. To read a uleb128 value, you proceed from the
-beginning of the string, one byte at a time. The lower 7 bits of each
-byte give you the next 7 bits of your integer. This is little-endian,
-so the first byte gives you the least-significant 7 bits of your
-integer, then the next byte gives you bits 8 through 15, the one after
-that the bits 16 through 23, etc. The 8th, most-significant bit of
-each byte serves as a continuation byte. If this is 1, then you keep
-going and read the next byte. If it is 0, then you are
-done. Examples::
+Outside of the header, integers are encoded in the *uleb128*
+format. This is a popular variable-length format for storing unsigned
+integers of arbitrary size; it is also used by `protocol buffers
+<https://en.wikipedia.org/wiki/Protocol_Buffers>`_ and the `XZ file
+format <http://tukaani.org/xz/xz-file-format-1.0.4.txt>`_, among
+others. The name comes from use in the `DWARF debugging format
+<https://en.wikipedia.org/wiki/DWARF>`_, and stands for **u**\nsigned
+**l**\ittle-**e**\ndian **b**\ase-**128**. To read a uleb128 value,
+you proceed from the beginning of the string, one byte at a time. The
+lower 7 bits of each byte give you the next 7 bits of your
+integer. This is little-endian, so the first byte gives you the
+least-significant 7 bits of your integer, then the next byte gives you
+bits 8 through 15, the one after that the bits 16 through 23, etc. The
+8th, most-significant bit of each byte serves as a continuation
+byte. If this is 1, then you keep going and read the next byte. If it
+is 0, then you are done. Examples::
 
   uleb128 string  <->  integer value
   --------------       -------------
@@ -134,13 +136,10 @@ done. Examples::
            ff 20              0x107f
   80 80 80 80 20             2 ** 33
 
-(This format is also used by `protocol buffers
-<https://en.wikipedia.org/wiki/Protocol_Buffers>`_, by the `XZ file
-format <http://tukaani.org/xz/xz-file-format-1.0.4.txt>`_, and
-others.) This format allows for redundant representations by adding
-leading zeros, e.g. the value 0 could also be written ``80
-00``. However, doing so is forbidden; all values MUST be encoded in
-their shortest form.
+In principle this format allows for redundant representations by
+adding leading zeros, e.g. the value 0 could also be written ``80
+00``. However, doing so in ZS files is forbidden; all values MUST be
+encoded in their shortest form.
 
 Layout details
 --------------
@@ -261,11 +260,11 @@ The header contains the following fields, in order:
     look parametrized, this is a simple literal string -- for example,
     using the encoder string ``lzma2;dsize=2^21`` is illegal. This
     means you can use the standard XZ presets 0 and 1, including the
-    "extreme" 0e and 1e modes, but not higher. This is pretty
-    reasonable, since there is never any advantage to using a
-    dictionary size that is larger than a single block payload, and we
-    expect >1 MiB blocks to be rare; but, if there is demand, we may
-    add further modes with larger dictionary sizes.
+    "extreme" 0e and 1e modes, but not higher. This is reasonable,
+    since there is never any advantage to using a dictionary size that
+    is larger than a single block payload, and we expect >1 MiB blocks
+    to be rare; but, if there is demand, we may add further modes with
+    larger dictionary sizes.
 
     As compared to using XZ format, raw LZMA2 streams are ~0.5%
     smaller, so that's nice. And, more importantly, the use of raw
@@ -281,9 +280,7 @@ The header contains the following fields, in order:
   to be attached to a ZS file. The only restriction is that the
   encoded value MUST be what JSON calls an "object" (also known as a
   dict, hash table, etc. -- basically, the outermost characters have
-  to be ``{}``). But this object can contain arbitrarily complex
-  values (though we recommend restricting yourself to strings for the
-  keys). See :ref:`metadata-conventions`.
+  to be ``{}``). Inside this object, any valid JSON is allowed.
 
 * <extensions> (??): Compliant readers MUST ignore any data occurring
   between the end of the metadata field and the end of the header (as
@@ -317,9 +314,9 @@ Blocks themselves all have the same format:
   header, and then interpreted according to the rules below.
 
 * CRC-64-xz (``u64le``): CRC of the data in the block. This does not
-  include the length field -- see diagram. Note that this is
-  calculated directly on the raw disk representation of the block,
-  compression and all.
+  include the length field, but does include the level field -- see
+  diagram. Note that this is calculated directly on the compressed
+  disk representation of the block, *not* the decompressed payload.
 
 Technically we don't need to store the length at the beginning of each
 block, because every block also has its length stored either in an
@@ -419,6 +416,19 @@ occur in the file, though in general each index will occur after the
 blocks it points to, because unless you are very clever you can't
 write an index block until after you have written the pointed-to
 blocks and recorded their disk offsets.
+
+
+Other notes
+-----------
+
+If you are implementing a ZS file writer, then we recommend using the
+``zs validate`` tool to confirm that you are generating valid ZS
+files.
+
+If you are implementing a ZS file reader, then we recommend checking
+out the `ZS tools test suite
+<https://github.com/njsmith/zs/tree/master/zs/tests/data>`_ which
+contains a large collection of valid and subtly invalid files.
 
 
 Specification history
