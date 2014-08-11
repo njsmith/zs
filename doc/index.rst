@@ -184,7 +184,7 @@ these traditional formats:
   .. sneaky hack: we set the TIME envvar in conf.py to get nicer
      output from the 'time' command called here
 
-  .. command-output:: time zs dump --prefix='this is fun\t' http://bolete.ucsd.edu/njsmith/google-books-eng-us-all-20120701-3gram.zs
+  .. command-output:: time zs dump --prefix='this is fun\t' http://cpl-data.ucsd.edu/zs/google-books-20120701/eng-us-all/google-books-eng-us-all-20120701-3gram.zs
      :shell:
      :ellipsis: 2,-4
 
