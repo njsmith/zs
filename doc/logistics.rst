@@ -40,6 +40,15 @@ Code and bug tracker:
 Contact:
   Nathaniel J. Smith <nathaniel.smith@ed.ac.uk>
 
+Citation:
+  If you use this software in work that leads to a scientific
+  publication, and feel that a citation would be appropriate, then
+  here is a possible citation:
+
+  Smith, N. J. (in preparation). ZS: A file format for efficiently
+  distributing, using, and archiving record-oriented data sets of
+  any size. Retrieved from http://vorpus.org/papers/draft/zs-paper.pdf
+
 Developer dependencies (only needed for hacking on source):
   * Cython: needed to build from checkout
   * nose: needed to run tests
