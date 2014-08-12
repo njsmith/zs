@@ -431,6 +431,13 @@ out the `ZS tools test suite
 contains a large collection of valid and subtly invalid files.
 
 
+A minimal decompressor
+----------------------
+
+.. literalinclude:: figures/unzs.py
+   :language: python
+
+
 Specification history
 ---------------------
 
