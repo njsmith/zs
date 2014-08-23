@@ -45,7 +45,7 @@ Citation:
   publication, and feel that a citation would be appropriate, then
   here is a possible citation:
 
-  Smith, N. J. (in preparation). ZS: A file format for efficiently
+  Smith, N. J. (submitted). ZS: A file format for efficiently
   distributing, using, and archiving record-oriented data sets of
   any size. Retrieved from http://vorpus.org/papers/draft/zs-paper.pdf
 
