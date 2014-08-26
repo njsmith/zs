@@ -23,3 +23,6 @@
 * announce release on:
      ...?
 * update zs/version.py (add "-dev")
+* go to https://github.com/njsmith/zs/releases/new and type the tag
+  name and give it some text. (This will trigger Zenodo archiving the
+  tag.)
