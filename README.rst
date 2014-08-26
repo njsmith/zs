@@ -60,13 +60,25 @@ Contact:
   Nathaniel J. Smith <nathaniel.smith@ed.ac.uk>
 
 Citation:
-  If you use this software in work that leads to a scientific
-  publication, and feel that a citation would be appropriate, then
-  here is a possible citation:
+  If you use this software (or the ZS format in general) in
+  work that leads to a scientific publication, and feel that a
+  citation would be appropriate, then here is a possible citation:
 
   Smith, N. J. (submitted). ZS: A file format for efficiently
   distributing, using, and archiving record-oriented data sets of
   any size. Retrieved from http://vorpus.org/papers/draft/zs-paper.pdf
+
+  In addition, if you wish to document exactly which version of this
+  software you used, then each official release has its own DOI which
+  you can find on the `change history page
+  <http://zs.readthedocs.org/en/latest/changes.html>`_.
+
+  It may make sense to cite either or both of these at the same time
+  -- the paper gives a general introduction to the ZS format and why
+  it is useful, the version-specific DOIs link directly to archived
+  snapshots of a specific version of this specific implementation of
+  the ZS format. FWIW, I personally benefit more from citations to the
+  paper.
 
 Developer dependencies (only needed for hacking on source):
   * Cython: needed to build from checkout
