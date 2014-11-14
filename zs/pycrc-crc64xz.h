@@ -1,4 +1,9 @@
 /**
+ * This file has been hand-modified to convert 'static inline' functions into
+ * 'static', because 'static inline' is unsupported by MSVC.
+ */
+
+/**
  * \file pycrc-crc64xz.h
  * Functions and types for CRC checks.
  *
@@ -53,7 +58,7 @@ pycrc_crc64xz_t pycrc_crc64xz_reflect(pycrc_crc64xz_t data, size_t data_len);
  *
  * \return     The initial crc value.
  *****************************************************************************/
-static inline pycrc_crc64xz_t pycrc_crc64xz_init(void)
+static pycrc_crc64xz_t pycrc_crc64xz_init(void)
 {
     return 0xffffffffffffffff;
 }
@@ -76,7 +81,7 @@ pycrc_crc64xz_t pycrc_crc64xz_update(pycrc_crc64xz_t crc, const unsigned char *d
  * \param crc  The current crc value.
  * \return     The final crc value.
  *****************************************************************************/
-static inline pycrc_crc64xz_t pycrc_crc64xz_finalize(pycrc_crc64xz_t crc)
+static pycrc_crc64xz_t pycrc_crc64xz_finalize(pycrc_crc64xz_t crc)
 {
     return crc ^ 0xffffffffffffffff;
 }
