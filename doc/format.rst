@@ -399,13 +399,13 @@ We require:
 
   .. note:: According to this definition, it is always legal to simply
      take the first record spanned by a block, and use that for its
-     key. But we do not guarantee this; advanced implementations might
-     take advantage of this flexibility to choose shorter keys that are
-     just long enough to satisfy the invariant above. (In particular,
-     there's nothing in ZS stopping you from having large individual
-     records, up into the megabyte range and beyond, and in this case
-     you might well prefer not to copy the whole record into the index
-     block.)
+     key. But there are other options, and advanced implementations
+     might (for example) take advantage of this flexibility to choose
+     shorter keys that are still long enough to satisfy the invariant
+     above. (In particular, there's nothing in ZS stopping you from
+     having large individual records, up into the megabyte range and
+     beyond, and in this case you might well prefer not to copy the
+     whole record into the index block.)
 
 Notice that all invariants use non-strict inequalities; this is
 because the same record might occur multiple times in different
@@ -428,7 +428,8 @@ files.
 If you are implementing a ZS file reader, then we recommend checking
 out the `ZS tools test suite
 <https://github.com/njsmith/zs/tree/master/zs/tests/data>`_ which
-contains a large collection of valid and subtly invalid files.
+contains a large collection of unusual-yet-valid and subtly invalid
+files.
 
 
 A minimal decompressor
