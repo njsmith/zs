@@ -232,15 +232,16 @@ these traditional formats:
   choice.
 
 * Relying on the ZS format creates **minimal risk**: The ZS file
-  format is simple and :ref:`fully documented <format>`; an average
-  programmer with access to standard libraries could write a working
-  decompressor in a few hours. The reference implementation is
-  BSD-licensed, undergoes exhaustive automated testing (>98% coverage)
-  after every checkin, and just in case there are any ambiguities in
-  the English spec, we also have a complete :ref:`file format
-  validator <zs validate>`, so you can confirm that your files match
-  the spec and be confident that they will be readable by any
-  compliant implementation.
+  format is simple and :ref:`fully documented <format>`; it's not hard
+  to write an implementation for your favorite language. In an
+  emergency, an average programmer with access to standard libraries
+  could write a minimal but working decompressor in just an hour or
+  two. The reference implementation is BSD-licensed, undergoes
+  exhaustive automated testing (>98% coverage) after every checkin,
+  and just in case there are any ambiguities in the English spec, we
+  also have a complete :ref:`file format validator <zs validate>`, so
+  you can confirm that your files match the spec and be confident that
+  they will be readable by any compliant implementation.
 
 * ZS files have a name **composed entirely of sibilants**: How many
   file formats can say *that*?
